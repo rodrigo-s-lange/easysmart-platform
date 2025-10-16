@@ -92,3 +92,6 @@ Copiar código
 **Fase 0.1** — Criar `docker/docker-compose.yml` com **Mosquitto** e **Postgres** subindo, sem backend ainda.  
 Depois disso, subir os containers e validar conectividade.
 
+
+> docker-compose.yml movido para a raiz do projeto easysmart-platform.
+
