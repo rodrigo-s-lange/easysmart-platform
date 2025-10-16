@@ -57,3 +57,30 @@ esphome-examples/**/secrets.yaml
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+*.iml
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables (já estava, mas garantindo)
+.env
+.env.local
+.env.*.local
