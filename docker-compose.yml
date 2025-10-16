@@ -1,3 +1,9 @@
+# easysmart-platform stack
+# Serviços:
+# - Postgres (dados persistentes)
+# - Mosquitto (broker MQTT)
+# - easysmart-server (backend Node.js)
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,7 +17,6 @@ services:
       - "5432:5432"
     volumes:
       - ./postgres/data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d
 
   mqtt-broker:
     image: eclipse-mosquitto:2.0
@@ -27,15 +32,15 @@ services:
 
   easysmart-server:
     build:
-      context: ../server
+      context: ./server
     container_name: easysmart-server
     restart: unless-stopped
     environment:
-      - PG_HOST=postgres
-      - PG_PORT=5432
-      - PG_USER=easysmart
-      - PG_PASSWORD=easysmart123
-      - PG_DB=easysmart
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: easysmart
+      PG_PASSWORD: easysmart123
+      PG_DB: easysmart
     ports:
       - "3000:3000"
     depends_on:
