@@ -12,6 +12,7 @@ const { testConnection: testInflux } = require('./config/influxdb');
 const mqttConfig = require('./config/mqtt');   // <-- importa o módulo inteiro
 const { initMqttService } = require('./services/mqttService');
 const authRoutes = require('./routes/auth');
+const deviceRoutes = require('./routes/devices');
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const app = express();
@@ -22,6 +23,8 @@ app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 app.use(pinoHttp({ logger }));
+app.use('/api/v1/devices', deviceRoutes);
+
 
 // ==================== ROOT ====================
 app.get('/', (req, res) => {
