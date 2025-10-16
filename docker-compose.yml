@@ -1,35 +1,116 @@
+
 services:
+  # PostgreSQL - Dados Relacionais
   postgres:
     image: postgres:16-alpine
     container_name: postgres-easysmart
     restart: unless-stopped
     environment:
-      POSTGRES_USER: easysmart
-      POSTGRES_PASSWORD: easysmart123
-      POSTGRES_DB: easysmart
+      POSTGRES_USER: ${POSTGRES_USER:-easysmart}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-easysmart123}
+      POSTGRES_DB: ${POSTGRES_DB:-easysmart}
     ports:
       - "5432:5432"
     volumes:
       - ./postgres/data:/var/lib/postgresql/data
+    networks:
+      - easysmart-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-easysmart}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # InfluxDB - Time Series
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: influxdb-easysmart
+    restart: unless-stopped
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_ADMIN_USER:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD:-admin123}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-easysmart}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET:-iot_data}
+      DOCKER_INFLUXDB_INIT_RETENTION: 30d
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN:-your-super-secret-token}
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./influxdb/data:/var/lib/influxdb2
+      - ./influxdb/config:/etc/influxdb2
+    networks:
+      - easysmart-net
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Mosquitto MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto-easysmart
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - easysmart-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 1883 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # Backend API (Node.js)
   easysmart-server:
     build:
       context: ./server
+      dockerfile: Dockerfile
     container_name: easysmart-server
     restart: unless-stopped
     environment:
+      # PostgreSQL
       PG_HOST: postgres
       PG_PORT: 5432
-      PG_USER: easysmart
-      PG_PASSWORD: easysmart123
-      PG_DB: easysmart
-      MQTT_HOST: 172.17.0.1        # IP do host (onde roda o broker externo)
+      PG_USER: ${POSTGRES_USER:-easysmart}
+      PG_PASSWORD: ${POSTGRES_PASSWORD:-easysmart123}
+      PG_DB: ${POSTGRES_DB:-easysmart}
+      # InfluxDB
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUXDB_ADMIN_TOKEN:-your-super-secret-token}
+      INFLUX_ORG: ${INFLUXDB_ORG:-easysmart}
+      INFLUX_BUCKET: ${INFLUXDB_BUCKET:-iot_data}
+      # MQTT
+      MQTT_HOST: mosquitto
       MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-devices}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-mqtt123}
+      # App
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-32-chars-minimum}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
     ports:
       - "3000:3000"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    networks:
+      - easysmart-net
 
 networks:
-  default:
-    name: easysmart-net
+  easysmart-net:
+    driver: bridge
