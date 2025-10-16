@@ -1,569 +1,830 @@
-# 🏭 EasySmart IoT Platform
+# 🏠 EasySmart IoT Platform
 
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Node](https://img.shields.io/badge/node-20.x-green)
-![ESPHome](https://img.shields.io/badge/ESPHome-compatible-purple)
-![Status](https://img.shields.io/badge/status-in%20development-yellow)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.19.0-brightgreen)](https://nodejs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)](https://www.postgresql.org/)
+[![InfluxDB](https://img.shields.io/badge/InfluxDB-2.x-blue)](https://www.influxdata.com/)
 
-> **Multi-tenant SaaS IoT platform** usando ESPHome + MQTT para dispositivos ESP32/ESP8266
+> Plataforma SaaS multi-tenant para gerenciamento de dispositivos IoT usando ESP32/ESP8266 com ESPHome
+
+## 📋 Índice
+
+- [Visão Geral](#-visão-geral)
+- [Arquitetura](#-arquitetura)
+- [Stack Tecnológica](#-stack-tecnológica)
+- [Estrutura do Projeto](#-estrutura-do-projeto)
+- [Pré-requisitos](#-pré-requisitos)
+- [Instalação](#-instalação)
+- [Configuração](#-configuração)
+- [Execução](#-execução)
+- [API Endpoints](#-api-endpoints)
+- [MQTT Topics](#-mqtt-topics)
+- [Desenvolvimento](#-desenvolvimento)
+- [Roadmap](#-roadmap)
+- [Contexto para IA](#-contexto-para-ia)
+- [Troubleshooting](#-troubleshooting)
+- [Licença](#-licença)
 
 ---
 
 ## 🎯 Visão Geral
 
-EasySmart permite criar, gerenciar e monitorar dispositivos IoT usando **ESPHome** para firmware e uma **interface web customizada** para visualização e controle.
+EasySmart é uma plataforma IoT completa que permite:
 
-### Por Que ESPHome?
+- ✅ **Gerenciamento Multi-Tenant** de dispositivos IoT
+- ✅ **Provisionamento automático** via ESPHome
+- ✅ **Comunicação MQTT** em tempo real
+- ✅ **Armazenamento de séries temporais** (InfluxDB)
+- ✅ **Dashboard Web** para monitoramento
+- ✅ **API REST** para integrações
 
-- ✅ **Zero código C++** - Configuração via YAML
-- ✅ **Auto-discovery** - Dispositivos se registram automaticamente
-- ✅ **OTA Updates** - Atualização remota de firmware
-- ✅ **MQTT nativo** - Comunicação confiável
-- ✅ **Entidades prontas** - Sensores, switches, números, textos
-- ✅ **Compatível com Home Assistant** - Integração opcional
+### Casos de Uso
+
+- 🏡 Automação residencial
+- 🏭 Monitoramento industrial
+- 🌡️ Sensoriamento ambiental
+- 💡 Controle de iluminação inteligente
+- 🔌 Gerenciamento de energia
 
 ---
 
 ## 🏗️ Arquitetura
+
+### Diagrama de Componentes
 ```
-┌──────────────┐
-│   ESP32      │  ← ESPHome Firmware (YAML)
-│  (Device)    │
-└──────┬───────┘
-       │ MQTT
-       ▼
-┌──────────────────┐
-│   Mosquitto      │  ← Message Broker
-└─────┬────────────┘
-      │
-      ├─────────────────┬──────────────┐
-      ▼                 ▼              ▼
-┌──────────┐    ┌─────────────┐  ┌──────────┐
-│PostgreSQL│    │  InfluxDB   │  │  Backend │
-│Metadata  │    │Time-Series  │  │ Node.js  │
-└──────────┘    └─────────────┘  └────┬─────┘
-                                       │
-                                       ▼
-                              ┌────────────────┐
-                              │    Frontend    │
-                              │     React      │
-                              └────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                     FRONTEND (React)                         │
+│                    Port: 3000 (futuro)                       │
+└────────────────────────┬────────────────────────────────────┘
+                         │ HTTP/REST
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  BACKEND (Node.js/Express)                   │
+│                        Port: 3001                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Auth/Users   │  │   Devices    │  │   Telemetry  │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+└───┬─────────────┬─────────────┬──────────────────────┬──────┘
+    │             │             │                      │
+    │ PostgreSQL  │ InfluxDB    │ MQTT                 │
+    ▼             ▼             ▼                      ▼
+┌─────────┐  ┌─────────┐  ┌──────────┐         ┌──────────┐
+│PostgreSQL│  │InfluxDB │  │ Mosquitto│         │ ESPHome  │
+│Port: 5432│  │Port:8086│  │Port: 1883│         │Port: 6052│
+└─────────┘  └─────────┘  └────┬─────┘         └──────────┘
+                                │ MQTT Topics
+                                ▼
+                    ┌───────────────────────┐
+                    │   ESP32/ESP8266       │
+                    │   (ESPHome Firmware)  │
+                    └───────────────────────┘
+```
+
+### Fluxo de Dados
+
+#### 1. Telemetria (Device → Cloud)
+```
+ESP32 → MQTT (publish) → Mosquitto → Backend → InfluxDB
+                                    └─→ PostgreSQL (last_seen)
+```
+
+#### 2. Comandos (Cloud → Device)
+```
+Frontend → Backend → MQTT (publish) → Mosquitto → ESP32
+```
+
+#### 3. Provisionamento
+```
+ESPHome Dashboard → Compile → Flash → Device → Auto-discover (MQTT)
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🛠️ Stack Tecnológica
 
-### Pré-requisitos
+### Backend
+- **Node.js** v18.19.1+ (LTS)
+- **Express** 5.1.0 (Web framework)
+- **PostgreSQL** 16 (Relational DB)
+- **InfluxDB** 2.x (Time-series DB)
+- **MQTT.js** 5.14.1 (MQTT client)
+- **Pino** 9.5.0 (Structured logging)
 
-- Docker & Docker Compose
-- Node.js 20.x (desenvolvimento local)
-- ESPHome (já incluído no stack)
+### Frontend (Futuro)
+- **React** 18+
+- **TypeScript**
+- **Vite**
+- **TailwindCSS**
 
-### 1️⃣ Infraestrutura Base
+### IoT
+- **ESPHome** (Firmware framework)
+- **ESP32 / ESP8266** (Hardware)
+- **MQTT** 3.1.1 / 5.0 (Protocol)
 
-A infraestrutura (PostgreSQL, InfluxDB, Mosquitto, ESPHome) já está rodando em:
-```
-~/docker/docker-compose.yml
-```
-
-Serviços disponíveis:
-- PostgreSQL: `localhost:5432`
-- InfluxDB: `localhost:8086`
-- Mosquitto MQTT: `localhost:1883`
-- ESPHome: `localhost:6052`
-
-### 2️⃣ Backend API
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-Backend roda em: `http://localhost:3001`
-
-### 3️⃣ Frontend
-```bash
-cd frontend
-npm install
-npm start
-```
-
-Frontend roda em: `http://localhost:3000`
-
-### 4️⃣ Criar Dispositivo ESPHome
-
-1. Acesse ESPHome: `http://localhost:6052`
-2. Crie novo device com YAML template de `esphome-examples/`
-3. Compile e faça upload OTA
-4. Device aparece automaticamente no dashboard!
-
----
-
-## 📡 MQTT Topics
-
-### Estrutura de Topics
-```
-easysmart/{DEVICE_ID}/sensor/{ENTITY_ID}/state       # Leitura de sensores
-easysmart/{DEVICE_ID}/switch/{ENTITY_ID}/state       # Estado de switches
-easysmart/{DEVICE_ID}/switch/{ENTITY_ID}/command     # Comandos para switches
-easysmart/{DEVICE_ID}/number/{ENTITY_ID}/state       # Valores numéricos
-easysmart/{DEVICE_ID}/availability                   # Online/Offline (LWT)
-```
-
-### Exemplo de Mensagens
-```json
-// Sensor de temperatura
-Topic: easysmart/ESP32_001/sensor/temperature/state
-Payload: {"value": 23.5, "unit": "°C"}
-
-// Switch (relay)
-Topic: easysmart/ESP32_001/switch/relay_1/state
-Payload: {"state": "ON"}
-
-// Comando para ligar relay
-Topic: easysmart/ESP32_001/switch/relay_1/command
-Payload: "ON"
-```
+### Infrastructure
+- **Docker** & **Docker Compose**
+- **Nginx** (Reverse proxy)
+- **Portainer** (Container management)
 
 ---
 
 ## 📁 Estrutura do Projeto
 ```
 easysmart-platform/
-├── backend/                 # API Node.js
+├── backend/                      # API Node.js
 │   ├── src/
-│   │   ├── config/         # Database, MQTT configs
-│   │   ├── models/         # Data models
-│   │   ├── controllers/    # Request handlers
-│   │   ├── routes/         # API routes
-│   │   ├── services/       # Business logic
-│   │   └── middleware/     # Auth, validation
-│   ├── package.json
-│   └── Dockerfile
-│
-├── frontend/               # React App
-│   ├── src/
-│   │   ├── components/    # Reusable components
-│   │   ├── pages/         # Page components
-│   │   ├── services/      # API calls
-│   │   └── hooks/         # Custom hooks
-│   ├── package.json
-│   └── Dockerfile
-│
-├── esphome-examples/       # Device templates
-│   ├── devices/
-│   │   ├── basic-sensor.yaml
-│   │   ├── relay-controller.yaml
-│   │   └── multi-sensor.yaml
-│   └── common/
-│       └── mqtt-config.yaml
-│
-└── docs/                   # Documentation
-    ├── API.md
-    ├── ESPHOME_GUIDE.md
-    └── DEPLOYMENT.md
+│   │   ├── config/              # Configurações
+│   │   │   ├── database.js      # PostgreSQL pool
+│   │   │   ├── influxdb.js      # InfluxDB client
+│   │   │   ├── logger.js        # Pino logger
+│   │   │   └── mqtt.js          # MQTT client
+│   │   ├── controllers/         # Business logic
+│   │   ├── middleware/          # Express middlewares
+│   │   │   └── errorHandler.js  # Global error handler
+│   │   ├── models/              # Data models
+│   │   ├── routes/              # API routes
+│   │   ├── services/            # External services
+│   │   └── server.js            # Entry point
+│   ├── .env                     # Environment variables
+│   └── package.json
+├── frontend/                     # React App (futuro)
+├── docs/                        # Documentação adicional
+├── .gitignore
+├── CHANGELOG.md
+├── LICENSE
+└── README.md                    # Este arquivo
+```
+
+### Backend: Estrutura Detalhada
+```
+backend/src/
+├── config/                       # 🔧 Configurações
+│   ├── database.js              # Pool PostgreSQL + test connection
+│   ├── influxdb.js              # Write/Query API + flush
+│   ├── logger.js                # Pino (pretty dev / JSON prod)
+│   └── mqtt.js                  # Pub/Sub + reconnect logic
+├── controllers/                  # 🎮 Lógica de negócio
+│   ├── authController.js        # (futuro) Login, register
+│   ├── deviceController.js      # (futuro) CRUD devices
+│   └── telemetryController.js   # (futuro) Queries time-series
+├── middleware/                   # 🛡️ Express middlewares
+│   ├── errorHandler.js          # Global error + 404 handler
+│   ├── auth.js                  # (futuro) JWT validation
+│   └── validation.js            # (futuro) Request validation
+├── models/                       # 📊 Data models
+│   ├── User.js                  # (futuro)
+│   ├── Tenant.js                # (futuro)
+│   └── Device.js                # (futuro)
+├── routes/                       # 🛣️ API routes
+│   ├── index.js                 # (futuro) Router aggregator
+│   ├── auth.js                  # (futuro) /api/v1/auth
+│   ├── devices.js               # (futuro) /api/v1/devices
+│   └── telemetry.js             # (futuro) /api/v1/telemetry
+├── services/                     # 🔌 External services
+│   ├── mqttService.js           # (futuro) MQTT handlers
+│   └── esphomeService.js        # (futuro) ESPHome integration
+└── server.js                     # 🚀 Application entry point
 ```
 
 ---
 
-## 🔐 Segurança
+## ⚙️ Pré-requisitos
 
-- ✅ JWT Authentication
-- ✅ MQTT com usuário/senha
-- ✅ PostgreSQL com senha forte
-- ✅ InfluxDB com token
-- ✅ Variáveis em `.env` (não commitadas)
+### Sistema Operacional
+- Ubuntu 24.04 LTS (recomendado)
+- Debian 12+
+- Qualquer Linux com Docker
 
----
+### Software
+- **Node.js** >= 18.19.0 ([Download](https://nodejs.org/))
+- **Docker** >= 20.10 ([Install](https://docs.docker.com/engine/install/))
+- **Docker Compose** >= 2.0
+- **Git** >= 2.30
 
-## 🛣️ Roadmap
-
-### ✅ Phase 0: Infraestrutura (COMPLETO)
-- Docker stack com PostgreSQL, InfluxDB, Mosquitto
-- ESPHome configurado
-
-### 🚧 Phase 1: Backend Básico (EM ANDAMENTO)
-- [ ] Conexão com PostgreSQL
-- [ ] Conexão com InfluxDB
-- [ ] Subscribe MQTT topics
-- [ ] API REST básica
-- [ ] Persistência de dados
-
-### 📋 Phase 2: Frontend
-- [ ] Dashboard com cards
-- [ ] Listagem de dispositivos
-- [ ] Controle de switches
-- [ ] Gráficos de sensores
-
-### 📋 Phase 3: ESPHome Integration
-- [ ] Templates YAML prontos
-- [ ] Auto-discovery de devices
-- [ ] OTA updates via interface
-
----
-
-## 🤝 Contribuindo
-
-1. Fork o projeto
-2. Crie uma branch: `git checkout -b feature/nova-feature`
-3. Commit: `git commit -m 'feat: adiciona nova feature'`
-4. Push: `git push origin feature/nova-feature`
-5. Abra um Pull Request
-
----
-
-## 📄 Licença
-
-MIT License - Veja [LICENSE](LICENSE) para detalhes.
-
----
-
-## 👤 Autor
-
-**Rodrigo S. Lange**
-- GitHub: [@rodrigo-s-lange](https://github.com/rodrigo-s-lange)
-- Domain: [easysmart.com.br](https://easysmart.com.br)
-
----
-
-**Built with ❤️ for the IoT community**
-
-**Last Updated:** 2025-10-16
-EOFcat > ~/easysmart-platform/README.md << 'EOF'
-# 🏭 EasySmart IoT Platform
-
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Node](https://img.shields.io/badge/node-20.x-green)
-![ESPHome](https://img.shields.io/badge/ESPHome-compatible-purple)
-![Status](https://img.shields.io/badge/status-in%20development-yellow)
-
-> **Multi-tenant SaaS IoT platform** usando ESPHome + MQTT para dispositivos ESP32/ESP8266
-
----
-
-## 🎯 Visão Geral
-
-EasySmart permite criar, gerenciar e monitorar dispositivos IoT usando **ESPHome** para firmware e uma **interface web customizada** para visualização e controle.
-
-### Por Que ESPHome?
-
-- ✅ **Zero código C++** - Configuração via YAML
-- ✅ **Auto-discovery** - Dispositivos se registram automaticamente
-- ✅ **OTA Updates** - Atualização remota de firmware
-- ✅ **MQTT nativo** - Comunicação confiável
-- ✅ **Entidades prontas** - Sensores, switches, números, textos
-- ✅ **Compatível com Home Assistant** - Integração opcional
-
----
-
-## 🏗️ Arquitetura
+### Portas Necessárias
 ```
-┌──────────────┐
-│   ESP32      │  ← ESPHome Firmware (YAML)
-│  (Device)    │
-└──────┬───────┘
-       │ MQTT
-       ▼
-┌──────────────────┐
-│   Mosquitto      │  ← Message Broker
-└─────┬────────────┘
-      │
-      ├─────────────────┬──────────────┐
-      ▼                 ▼              ▼
-┌──────────┐    ┌─────────────┐  ┌──────────┐
-│PostgreSQL│    │  InfluxDB   │  │  Backend │
-│Metadata  │    │Time-Series  │  │ Node.js  │
-└──────────┘    └─────────────┘  └────┬─────┘
-                                       │
-                                       ▼
-                              ┌────────────────┐
-                              │    Frontend    │
-                              │     React      │
-                              └────────────────┘
+3001  - Backend API
+5432  - PostgreSQL
+8086  - InfluxDB
+1883  - MQTT (Mosquitto)
+6052  - ESPHome Dashboard
+8123  - Home Assistant (opcional)
+9000  - Portainer
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Instalação
 
-### Pré-requisitos
-
-- Docker & Docker Compose
-- Node.js 20.x (desenvolvimento local)
-- ESPHome (já incluído no stack)
-
-### 1️⃣ Infraestrutura Base
-
-A infraestrutura (PostgreSQL, InfluxDB, Mosquitto, ESPHome) já está rodando em:
-```
-~/docker/docker-compose.yml
-```
-
-Serviços disponíveis:
-- PostgreSQL: `localhost:5432`
-- InfluxDB: `localhost:8086`
-- Mosquitto MQTT: `localhost:1883`
-- ESPHome: `localhost:6052`
-
-### 2️⃣ Backend API
+### 1. Clone o repositório
 ```bash
-cd backend
+git clone https://github.com/rodrigo-s-lange/easysmart-platform.git
+cd easysmart-platform
+```
+
+### 2. Configure a infraestrutura (Docker)
+```bash
+# Criar arquivo .env para infraestrutura
+cd ~/docker
+cp .env.example .env
+
+# Editar senhas (se necessário)
+nano .env
+
+# Iniciar serviços
+docker compose up -d
+
+# Verificar status
+docker compose ps
+```
+
+### 3. Configure o backend
+```bash
+cd ~/easysmart-platform/backend
+
+# Instalar dependências
 npm install
+
+# Criar .env
+cp .env.example .env
+
+# Editar variáveis de ambiente
+nano .env
+```
+
+### 4. Criar banco de dados
+```bash
+# Criar database no PostgreSQL
+docker exec -it postgres psql -U postgres -c "CREATE DATABASE easysmart;"
+
+# Verificar
+docker exec -it postgres psql -U postgres -c "\l" | grep easysmart
+```
+
+---
+
+## �� Configuração
+
+### Backend `.env`
+```bash
+# PostgreSQL Configuration
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_secure_password_here
+POSTGRES_DB=easysmart
+
+# InfluxDB Configuration
+INFLUXDB_URL=http://localhost:8086
+INFLUXDB_TOKEN=your_influxdb_token_here
+INFLUXDB_ORG=easysmart
+INFLUXDB_BUCKET=iot_data
+
+# MQTT Configuration
+MQTT_HOST=localhost
+MQTT_PORT=1883
+MQTT_USERNAME=devices
+MQTT_PASSWORD=your_mqtt_password_here
+
+# Server Configuration
+PORT=3001
+NODE_ENV=development
+LOG_LEVEL=info
+
+# CORS (opcional)
+CORS_ORIGIN=*
+
+# JWT (futuro)
+JWT_SECRET=your_jwt_secret_here
+JWT_EXPIRES_IN=7d
+```
+
+### Obter Credenciais
+```bash
+# PostgreSQL password
+grep POSTGRES_PASSWORD ~/docker/.env
+
+# InfluxDB token
+grep INFLUXDB_ADMIN_TOKEN ~/docker/.env
+
+# MQTT password
+grep MQTT_PASSWORD ~/docker/.env
+```
+
+---
+
+## ▶️ Execução
+
+### Desenvolvimento
+```bash
+cd ~/easysmart-platform/backend
+
+# Modo watch (reinicia automaticamente)
 npm run dev
+
+# Logs coloridos com Pino Pretty
 ```
 
-Backend roda em: `http://localhost:3001`
-
-### 3️⃣ Frontend
+### Produção
 ```bash
-cd frontend
-npm install
+# Modo produção (sem nodemon)
 npm start
+
+# Com PM2 (recomendado)
+npm install -g pm2
+pm2 start src/server.js --name easysmart-backend
+pm2 save
+pm2 startup
 ```
 
-Frontend roda em: `http://localhost:3000`
+### Verificar Status
+```bash
+# Health check
+curl http://localhost:3001/health
 
-### 4️⃣ Criar Dispositivo ESPHome
+# Deve retornar:
+{
+  "status": "ok",
+  "services": {
+    "postgres": true,
+    "influxdb": true,
+    "mqtt": true
+  }
+}
+```
 
-1. Acesse ESPHome: `http://localhost:6052`
-2. Crie novo device com YAML template de `esphome-examples/`
-3. Compile e faça upload OTA
-4. Device aparece automaticamente no dashboard!
+---
+
+## 🌐 API Endpoints
+
+### Base URL
+```
+http://localhost:3001
+```
+
+### Endpoints Atuais
+
+#### `GET /`
+Informações da API
+
+**Response:**
+```json
+{
+  "message": "EasySmart IoT Platform API",
+  "version": "0.1.0",
+  "endpoints": {
+    "health": "/health",
+    "api": "/api/v1"
+  }
+}
+```
+
+#### `GET /health`
+Health check com status de todos os serviços
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-10-16T17:23:48.513Z",
+  "uptime": 68.32,
+  "environment": "development",
+  "version": "0.1.0",
+  "services": {
+    "postgres": true,
+    "influxdb": true,
+    "mqtt": true
+  }
+}
+```
+
+**Status Codes:**
+- `200` - Todos os serviços OK
+- `503` - Algum serviço degradado
+
+### Endpoints Futuros (Phase 1.2+)
+```
+POST   /api/v1/auth/register       # Criar conta
+POST   /api/v1/auth/login          # Login
+GET    /api/v1/devices             # Listar dispositivos
+POST   /api/v1/devices             # Adicionar dispositivo
+GET    /api/v1/devices/:id         # Detalhes do dispositivo
+PUT    /api/v1/devices/:id         # Atualizar dispositivo
+DELETE /api/v1/devices/:id         # Remover dispositivo
+GET    /api/v1/telemetry/:deviceId # Dados de telemetria
+POST   /api/v1/commands/:deviceId  # Enviar comando
+```
 
 ---
 
 ## 📡 MQTT Topics
 
-### Estrutura de Topics
+### Estrutura de Tópicos
 ```
-easysmart/{DEVICE_ID}/sensor/{ENTITY_ID}/state       # Leitura de sensores
-easysmart/{DEVICE_ID}/switch/{ENTITY_ID}/state       # Estado de switches
-easysmart/{DEVICE_ID}/switch/{ENTITY_ID}/command     # Comandos para switches
-easysmart/{DEVICE_ID}/number/{ENTITY_ID}/state       # Valores numéricos
-easysmart/{DEVICE_ID}/availability                   # Online/Offline (LWT)
+easysmart/{DEVICE_ID}/{TYPE}/{ENTITY_ID}/{ACTION}
 ```
 
-### Exemplo de Mensagens
-```json
-// Sensor de temperatura
-Topic: easysmart/ESP32_001/sensor/temperature/state
+### Exemplos
+
+#### Telemetria (Device → Cloud)
+```bash
+# Sensor de temperatura
+easysmart/esp32-living-room/sensor/temperature/state
 Payload: {"value": 23.5, "unit": "°C"}
 
-// Switch (relay)
-Topic: easysmart/ESP32_001/switch/relay_1/state
+# Sensor de umidade
+easysmart/esp32-living-room/sensor/humidity/state
+Payload: {"value": 65.2, "unit": "%"}
+
+# Status de switch
+easysmart/esp32-kitchen/switch/light/state
 Payload: {"state": "ON"}
-
-// Comando para ligar relay
-Topic: easysmart/ESP32_001/switch/relay_1/command
-Payload: "ON"
 ```
 
----
-
-## 📁 Estrutura do Projeto
-```
-easysmart-platform/
-├── backend/                 # API Node.js
-│   ├── src/
-│   │   ├── config/         # Database, MQTT configs
-│   │   ├── models/         # Data models
-│   │   ├── controllers/    # Request handlers
-│   │   ├── routes/         # API routes
-│   │   ├── services/       # Business logic
-│   │   └── middleware/     # Auth, validation
-│   ├── package.json
-│   └── Dockerfile
-│
-├── frontend/               # React App
-│   ├── src/
-│   │   ├── components/    # Reusable components
-│   │   ├── pages/         # Page components
-│   │   ├── services/      # API calls
-│   │   └── hooks/         # Custom hooks
-│   ├── package.json
-│   └── Dockerfile
-│
-├── esphome-examples/       # Device templates
-│   ├── devices/
-│   │   ├── basic-sensor.yaml
-│   │   ├── relay-controller.yaml
-│   │   └── multi-sensor.yaml
-│   └── common/
-│       └── mqtt-config.yaml
-│
-└── docs/                   # Documentation
-    ├── API.md
-    ├── ESPHOME_GUIDE.md
-    └── DEPLOYMENT.md
-```
-
----
-
-## 🔐 Segurança
-
-- ✅ JWT Authentication
-- ✅ MQTT com usuário/senha
-- ✅ PostgreSQL com senha forte
-- ✅ InfluxDB com token
-- ✅ Variáveis em `.env` (não commitadas)
-
----
-
-## 🛣️ Roadmap
-
-### ✅ Phase 0: Infraestrutura (COMPLETO)
-- Docker stack com PostgreSQL, InfluxDB, Mosquitto
-- ESPHome configurado
-
-### 🚧 Phase 1: Backend Básico (EM ANDAMENTO)
-- [ ] Conexão com PostgreSQL
-- [ ] Conexão com InfluxDB
-- [ ] Subscribe MQTT topics
-- [ ] API REST básica
-- [ ] Persistência de dados
-
-### 📋 Phase 2: Frontend
-- [ ] Dashboard com cards
-- [ ] Listagem de dispositivos
-- [ ] Controle de switches
-- [ ] Gráficos de sensores
-
-### 📋 Phase 3: ESPHome Integration
-- [ ] Templates YAML prontos
-- [ ] Auto-discovery de devices
-- [ ] OTA updates via interface
-
----
-
-## 🤝 Contribuindo
-
-1. Fork o projeto
-2. Crie uma branch: `git checkout -b feature/nova-feature`
-3. Commit: `git commit -m 'feat: adiciona nova feature'`
-4. Push: `git push origin feature/nova-feature`
-5. Abra um Pull Request
-
----
-
-## 📄 Licença
-
-MIT License - Veja [LICENSE](LICENSE) para detalhes.
-
----
-
-## 👤 Autor
-
-**Rodrigo S. Lange**
-- GitHub: [@rodrigo-s-lange](https://github.com/rodrigo-s-lange)
-- Domain: [easysmart.com.br](https://easysmart.com.br)
-
----
-
-**Built with ❤️ for the IoT community**
-
-**Last Updated:** 2025-10-16
-
----
-
-## 🤖 Diretrizes para IA (Claude/ChatGPT)
-
-### Contexto do Projeto
-
-Este é um projeto **multi-tenant SaaS IoT** que usa **ESPHome** para firmware de dispositivos ESP32/ESP8266 e uma plataforma web customizada para gerenciamento.
-
-### Arquitetura Atual
-
-**Infraestrutura (~/docker/):**
-- ✅ PostgreSQL (porta 5432) - Metadata
-- ✅ InfluxDB (porta 8086) - Time-series
-- ✅ Mosquitto MQTT (portas 1883/9001) - Message broker
-- ✅ ESPHome (porta 6052) - Device firmware compiler
-- ✅ Home Assistant, Portainer, Watchtower
-
-**Aplicação (~/easysmart-platform/):**
-- 🚧 Backend Node.js (porta 3001) - EM DESENVOLVIMENTO
-- 🚧 Frontend React (porta 3000) - EM DESENVOLVIMENTO
-- 📋 ESPHome templates - A CRIAR
-
-### Estado Atual do Desenvolvimento
-
-**✅ COMPLETO:**
-1. Infraestrutura Docker rodando
-2. Repositório GitHub limpo e estruturado
-3. Documentação inicial (README, CHANGELOG, LICENSE)
-4. Estrutura de diretórios criada
-
-**🚧 EM PROGRESSO:**
-1. Backend API (precisa ser criado)
-2. Frontend React (precisa ser criado)
-3. ESPHome templates (precisa ser criado)
-
-**📋 PRÓXIMOS PASSOS:**
-1. Criar `backend/package.json` com dependências
-2. Criar `backend/src/config/` (database, influxdb, mqtt)
-3. Criar `backend/src/services/mqttService.js` (subscribe MQTT)
-4. Criar template ESPHome básico
-
-### Credenciais e Configuração
-
-- **Servidor:** Ubuntu 24.04 LTS (server.local)
-- **Usuário:** rodrigo
-- **Infraestrutura:** `~/docker/`
-- **Projeto:** `~/easysmart-platform/`
-- **Senhas:** `~/docker/.env` (NÃO commitado)
-- **GitHub:** https://github.com/rodrigo-s-lange/easysmart-platform
-
-### Regras de Desenvolvimento
-
-1. **Um passo de cada vez** - Aguardar confirmação antes de prosseguir
-2. **Testar cada etapa** - Validar antes de avançar
-3. **Commits frequentes** - Usar Conventional Commits (feat, fix, docs)
-4. **Código completo** - Sem placeholders, sempre funcional
-5. **EOF format** - Usar `cat > file << 'EOF'` para criar arquivos
-6. **Documentar** - Atualizar README quando necessário
-
-### Convenção de Commits
-```
-feat: Nova funcionalidade
-fix: Correção de bug
-docs: Apenas documentação
-refactor: Refatoração sem mudar funcionalidade
-test: Adicionar testes
-chore: Manutenção, configs, dependencies
-```
-
-### Comandos Úteis
+#### Comandos (Cloud → Device)
 ```bash
-# Infraestrutura
-cd ~/docker && docker compose ps
+# Ligar luz
+easysmart/esp32-kitchen/switch/light/command
+Payload: "ON"
 
-# Projeto
-cd ~/easysmart-platform && git status
-
-# Logs
-docker logs postgres --tail 20
-docker logs influxdb --tail 20
-docker logs mosquitto --tail 20
-
-# Testar MQTT
-docker exec mosquitto mosquitto_pub -h localhost -u devices -P 'SENHA_DO_ENV' -t 'test' -m 'hello'
+# Desligar luz
+easysmart/esp32-kitchen/switch/light/command
+Payload: "OFF"
 ```
+
+#### Disponibilidade
+```bash
+# Device online
+easysmart/esp32-living-room/availability
+Payload: "online"
+
+# Device offline (LWT - Last Will Testament)
+easysmart/esp32-living-room/availability
+Payload: "offline"
+```
+
+### QoS Levels
+
+- **QoS 0** - At most once (telemetria não crítica)
+- **QoS 1** - At least once (comandos, dados críticos)
+- **QoS 2** - Exactly once (não usado por performance)
+
+### Testar MQTT Manualmente
+```bash
+# Publicar mensagem
+docker exec mosquitto mosquitto_pub \
+  -h localhost \
+  -u devices \
+  -P 'your_mqtt_password' \
+  -t 'easysmart/test/sensor/temp/state' \
+  -m '{"value": 25.5}'
+
+# Escutar tópico
+docker exec mosquitto mosquitto_sub \
+  -h localhost \
+  -u devices \
+  -P 'your_mqtt_password' \
+  -t 'easysmart/#' \
+  -v
+```
+
+---
+
+## 👨‍💻 Desenvolvimento
+
+### Convenções de Código
+
+#### Git Commit Messages (Conventional Commits)
+```bash
+feat: nova funcionalidade
+fix: correção de bug
+docs: documentação
+refactor: refatoração de código
+test: testes
+chore: tarefas de manutenção
+perf: melhorias de performance
+style: formatação de código
+```
+
+**Exemplos:**
+```bash
+git commit -m "feat: adiciona autenticação JWT"
+git commit -m "fix: corrige conexão MQTT em ambiente Docker"
+git commit -m "docs: atualiza README com endpoints da API"
+```
+
+#### Estrutura de Branches
+```
+main              # Produção (protegida)
+develop           # Desenvolvimento
+feature/*         # Novas funcionalidades
+fix/*             # Correções de bugs
+hotfix/*          # Correções urgentes
+```
+
+#### Code Style
+
+- **Indentação:** 2 espaços
+- **Quotes:** Single quotes `'`
+- **Semicolons:** Obrigatório
+- **Line length:** 100 caracteres
+- **Naming:**
+  - `camelCase` para variáveis/funções
+  - `PascalCase` para classes
+  - `UPPER_CASE` para constantes
+
+### Logging com Pino
+```javascript
+const logger = require('./config/logger');
+
+// Níveis disponíveis
+logger.trace('trace message');
+logger.debug('debug message');
+logger.info('info message');
+logger.warn('warning message');
+logger.error({ err }, 'error message');
+logger.fatal({ err }, 'fatal message');
+
+// Structured logging
+logger.info({
+  userId: 123,
+  action: 'login'
+}, 'User logged in');
+```
+
+### Error Handling
+```javascript
+const { asyncHandler } = require('./middleware/errorHandler');
+
+// Wrapper para async functions
+router.get('/devices', asyncHandler(async (req, res) => {
+  const devices = await Device.findAll();
+  res.json(devices);
+}));
+
+// Erros customizados
+const error = new Error('Device not found');
+error.statusCode = 404;
+throw error;
+```
+
+### Testes (Futuro)
+```bash
+# Instalar dependências de teste
+npm install --save-dev jest supertest
+
+# Rodar testes
+npm test
+
+# Coverage
+npm run test:coverage
+```
+
+---
+
+## 🗺️ Roadmap
+
+### ✅ Phase 1.1 - Backend Base (CONCLUÍDA)
+- [x] Setup projeto Node.js
+- [x] Configuração PostgreSQL
+- [x] Configuração InfluxDB
+- [x] Configuração MQTT
+- [x] Logger estruturado (Pino)
+- [x] Error handling global
+- [x] Health check endpoint
+
+### 🔄 Phase 1.2 - Database & Auth (EM ANDAMENTO)
+- [ ] Schema PostgreSQL (tenants, users, devices)
+- [ ] Migrations com node-pg-migrate
+- [ ] Autenticação JWT
+- [ ] Middleware de autorização
+- [ ] CRUD de usuários
+- [ ] Multi-tenancy
+
+### 📋 Phase 1.3 - Device Management
+- [ ] CRUD de dispositivos
+- [ ] Auto-discovery via MQTT
+- [ ] Device provisioning
+- [ ] Entity management
+- [ ] Device status tracking
+
+### 📊 Phase 1.4 - Telemetry & Analytics
+- [ ] Ingestão de dados via MQTT
+- [ ] Queries InfluxDB (Flux)
+- [ ] Agregações e estatísticas
+- [ ] Alertas e notificações
+- [ ] Data retention policies
+
+### 🎨 Phase 2.1 - Frontend Base
+- [ ] Setup React + Vite
+- [ ] Autenticação (login/register)
+- [ ] Dashboard principal
+- [ ] Listagem de dispositivos
+- [ ] Gráficos em tempo real
+
+### 🔌 Phase 2.2 - ESPHome Integration
+- [ ] ESPHome config generator
+- [ ] Firmware OTA updates
+- [ ] Device templates
+- [ ] WiFi provisioning
+
+### 🚀 Phase 3.1 - Production Ready
+- [ ] Docker multi-stage builds
+- [ ] CI/CD (GitHub Actions)
+- [ ] Monitoring (Prometheus + Grafana)
+- [ ] Backup automatizado
+- [ ] Rate limiting
+- [ ] API documentation (Swagger)
+
+### 🌟 Phase 3.2 - Advanced Features
+- [ ] Webhooks
+- [ ] Integrações (Home Assistant, Alexa)
+- [ ] Mobile app (React Native)
+- [ ] Rules engine (automações)
+- [ ] Marketplace de integrações
+
+---
+
+## 🤖 Contexto para IA
+
+Este projeto é desenvolvido com assistência de IA (Claude). Siga estas diretrizes:
 
 ### Perfil do Desenvolvedor
-
-- **Programação:** Pleno/Sênior (Node.js, React, Python, C++)
-- **Embedded:** Avançado (ESP32, ESP8266, protocols)
-- **Linux:** Intermediário (precisa de passos detalhados)
-- **Git:** Intermediário (conhece conceitos, precisa de boas práticas)
+- **Experiência:** Pleno/Sênior em Node.js, React, Python, C++
+- **Embedded:** Avançado (ESP32, ESPHome, MQTT)
+- **Linux:** Intermediário (precisa comandos explícitos)
+- **Git:** Intermediário (precisa lembretes)
 
 ### Preferências de Comunicação
-
-- ✅ Perguntas contextualizadas antes de executar
+- ✅ Perguntas contextualizadas antes de prosseguir
 - ✅ Buscar documentação oficial sempre
-- ✅ Ser direto e técnico
-- ✅ Sugerir commits em pontos estratégicos
-- ✅ Organizar código em arquivos separados
-- ❌ Não usar emojis excessivos
-- ❌ Não pular etapas de teste
+- ✅ Direto e técnico, sem emojis excessivos
+- ✅ Um passo de cada vez, aguardar confirmação
+- ❌ Sem TODOs ou placeholders em código
+- ❌ Sem pular etapas de teste
 
+### Regras de Desenvolvimento
+1. **Código completo** - Sempre funcional, sem placeholders
+2. **Testar sempre** - Validar antes de prosseguir
+3. **EOF format** - Usar `cat > file << 'EOF'` para arquivos
+4. **Commits frequentes** - feat/fix/docs/refactor
+5. **Perguntar antes** - Contextualizar necessidade
+
+### Arquitetura de Decisão
+```
+Precisa buscar docs atualizadas?
+  ├─ SIM → Buscar antes de implementar
+  └─ NÃO → Implementar com conhecimento base
+
+Mudança estrutural?
+  ├─ SIM → Discutir alternativas
+  └─ NÃO → Implementar diretamente
+
+Código funcionando?
+  ├─ SIM → Commit + próxima etapa
+  └─ NÃO → Debug passo a passo
+```
+
+### Comandos Úteis para IA Lembrar
+```bash
+# Ver infraestrutura
+cd ~/docker && docker compose ps
+
+# Ver logs de serviço
+docker logs <service> --tail 50 -f
+
+# Reiniciar serviço
+docker compose restart <service>
+
+# Git workflow
+git status
+git add .
+git commit -m "type: message"
+git push origin main
+
+# Backend
+cd ~/easysmart-platform/backend
+npm run dev          # Desenvolvimento
+npm start            # Produção
+
+# Testar API
+curl http://localhost:3001/health
+```
+
+### Credenciais (Lembrar de buscar no .env)
+```bash
+# PostgreSQL
+grep POSTGRES_PASSWORD ~/docker/.env
+
+# InfluxDB
+grep INFLUXDB_ADMIN_TOKEN ~/docker/.env
+
+# MQTT
+grep MQTT_PASSWORD ~/docker/.env
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Backend não inicia
+```bash
+# Verificar logs
+cd ~/easysmart-platform/backend
+npm run dev
+
+# Verificar se portas estão livres
+netstat -tulpn | grep -E '3001|5432|8086|1883'
+
+# Verificar serviços Docker
+docker compose ps
+```
+
+### Erro "database does not exist"
+```bash
+# Criar banco manualmente
+docker exec -it postgres psql -U postgres -c "CREATE DATABASE easysmart;"
+```
+
+### MQTT não conecta
+```bash
+# Verificar logs Mosquitto
+docker logs mosquitto --tail 50
+
+# Testar conexão
+docker exec mosquitto mosquitto_pub -h localhost -u devices -P 'senha' -t 'test' -m 'hello'
+
+# Verificar credenciais
+grep MQTT_PASSWORD ~/docker/.env
+```
+
+### InfluxDB não conecta
+```bash
+# Verificar logs
+docker logs influxdb --tail 50
+
+# Verificar token
+docker exec influxdb influx auth list
+
+# Recriar token (se necessário)
+docker exec influxdb influx auth create \
+  --org easysmart \
+  --all-access
+```
+
+### PostgreSQL connection timeout
+```bash
+# Reiniciar PostgreSQL
+docker compose restart postgres
+
+# Verificar logs
+docker logs postgres --tail 50
+
+# Testar conexão
+docker exec postgres psql -U postgres -c "SELECT 1;"
+```
+
+### Limpar e reconstruir tudo
+```bash
+# CUIDADO: Apaga todos os dados!
+cd ~/docker
+docker compose down -v
+docker compose up -d
+
+# Recriar banco
+docker exec -it postgres psql -U postgres -c "CREATE DATABASE easysmart;"
+
+# Reiniciar backend
+cd ~/easysmart-platform/backend
+npm run dev
+```
+
+---
+
+## 📄 Licença
+
+Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+---
+
+## 👥 Autor
+
+**Rodrigo S. Lange**
+- GitHub: [@rodrigo-s-lange](https://github.com/rodrigo-s-lange)
+- Email: rodrigo@easysmart.io
+
+---
+
+## 🙏 Agradecimentos
+
+- [ESPHome](https://esphome.io/) - Excelente framework para ESP32/ESP8266
+- [Express.js](https://expressjs.com/) - Web framework para Node.js
+- [InfluxDB](https://www.influxdata.com/) - Time-series database
+- [Eclipse Mosquitto](https://mosquitto.org/) - MQTT broker
+- [Pino](https://getpino.io/) - Fast logger para Node.js
+
+---
+
+**Last Updated:** 2025-10-16  
+**Version:** 0.1.0  
+**Status:** Phase 1.1 Complete ✅
