@@ -77,7 +77,7 @@ Persistência	Atualização de status, last_seen, metadata
 Segurança	Device Token ≠ User Token
 Templates	Registro de templates ESPHome reutilizáveis
 
-�� Stack Tecnológica
+🧱 Stack Tecnológica
 Camada	Tecnologias
 Backend	Node.js 18 / Express 5 / Pino / Zod
 Banco Relacional	PostgreSQL 16 (pg)
