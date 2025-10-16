@@ -1,9 +1,3 @@
-# easysmart-platform stack
-# Serviços:
-# - Postgres (dados persistentes)
-# - Mosquitto (broker MQTT)
-# - easysmart-server (backend Node.js)
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,18 +12,6 @@ services:
     volumes:
       - ./postgres/data:/var/lib/postgresql/data
 
-  mqtt-broker:
-    image: eclipse-mosquitto:2.0
-    container_name: mqtt-broker
-    restart: unless-stopped
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - ./mosquitto/config:/mosquitto/config
-      - ./mosquitto/data:/mosquitto/data
-      - ./mosquitto/log:/mosquitto/log
-
   easysmart-server:
     build:
       context: ./server
@@ -41,11 +23,12 @@ services:
       PG_USER: easysmart
       PG_PASSWORD: easysmart123
       PG_DB: easysmart
+      MQTT_HOST: 172.17.0.1     # ← IP do host (onde o Mosquitto externo roda)
+      MQTT_PORT: 1883
     ports:
       - "3000:3000"
     depends_on:
       - postgres
-      - mqtt-broker
 
 networks:
   default:
