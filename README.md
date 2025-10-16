@@ -6,7 +6,6 @@ A arquitetura é baseada em contêineres isolados e um backend Node.js conectado
 ---
 
 ## 🌍 Estrutura de Pastas (2025)
-
 ~/docker/iot
 ├── docker-compose.yml # Compose unificado do projeto
 ├── mosquitto/ # Configuração e dados do broker MQTT
