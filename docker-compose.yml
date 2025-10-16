@@ -23,7 +23,7 @@ services:
       PG_USER: easysmart
       PG_PASSWORD: easysmart123
       PG_DB: easysmart
-      MQTT_HOST: 172.17.0.1     # ← IP do host (onde o Mosquitto externo roda)
+      MQTT_HOST: 172.17.0.1        # IP do host (onde roda o broker externo)
       MQTT_PORT: 1883
     ports:
       - "3000:3000"
