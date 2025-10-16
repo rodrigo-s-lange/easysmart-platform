@@ -12,13 +12,13 @@ const {
 } = process.env;
 
 const MQTT_URL = `mqtt://${MQTT_HOST}:${MQTT_PORT}`;
+let client = null;
 let isConnected = false;
-let client;
 
 /**
- * Inicializa o cliente MQTT com reconexão e timeout seguro.
+ * Inicializa o cliente MQTT e retorna a instância conectada.
  */
-function initMqtt() {
+async function initMqtt() {
   return new Promise((resolve, reject) => {
     try {
       const options = {
@@ -36,32 +36,29 @@ function initMqtt() {
       client.on('connect', () => {
         isConnected = true;
         logger.info('✅ Conectado ao broker MQTT');
-        resolve(true);
+        resolve(client); // <- resolve só depois de realmente conectar
       });
 
-      client.on('error', err => {
+      client.on('error', (err) => {
         isConnected = false;
         logger.error({ err }, '❌ Erro MQTT');
       });
 
-      client.on('reconnect', () => {
-        logger.warn('♻️ Reconnectando ao broker MQTT...');
-      });
-
+      client.on('reconnect', () => logger.warn('♻️ Reconnectando ao broker MQTT...'));
       client.on('close', () => {
         isConnected = false;
         logger.warn('⚠️ Conexão MQTT encerrada');
       });
-
       client.on('offline', () => {
         isConnected = false;
         logger.warn('📡 Broker MQTT offline');
       });
 
+      // Timeout de segurança
       setTimeout(() => {
         if (!isConnected) {
           logger.warn('⏰ Timeout ao conectar ao MQTT');
-          resolve(false);
+          resolve(null);
         }
       }, 5000);
     } catch (err) {
@@ -72,34 +69,21 @@ function initMqtt() {
 }
 
 /**
- * Retorna estado atual da conexão
+ * Retorna se está conectado.
  */
 function isMqttConnected() {
   return isConnected;
 }
 
+/**
+ * Retorna a instância ativa do cliente MQTT.
+ */
+function getClient() {
+  return client;
+}
+
 module.exports = {
   initMqtt,
   isMqttConnected,
-  publish: (topic, message, opts = {}) => {
-    if (isConnected && client) {
-      client.publish(topic, message, opts);
-      logger.debug(`📤 MQTT → ${topic}: ${message}`);
-    } else {
-      logger.warn(`❌ Falha ao publicar (MQTT desconectado): ${topic}`);
-    }
-  },
-  subscribe: (topic, handler) => {
-    if (!client) return;
-    client.subscribe(topic, err => {
-      if (err) {
-        logger.error({ err }, `❌ Erro ao inscrever em ${topic}`);
-      } else {
-        logger.info(`📡 Inscrito em ${topic}`);
-      }
-    });
-    client.on('message', (t, payload) => {
-      if (t === topic) handler(payload.toString());
-    });
-  },
+  getClient,
 };
