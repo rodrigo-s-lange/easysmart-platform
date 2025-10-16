@@ -1,152 +1,88 @@
+'use strict';
+
 require('dotenv').config();
 const express = require('express');
-const helmet = require('helmet');
 const cors = require('cors');
+const helmet = require('helmet');
+const pino = require('pino');
 const pinoHttp = require('pino-http');
 
-const logger = require('./config/logger');
-const { testConnection: testPostgres, closePool } = require('./config/database');
-const { testConnection: testInflux, close: closeInflux } = require('./config/influxdb');
-const { connect: connectMQTT, disconnect: disconnectMQTT, getStatus: getMQTTStatus } = require('./config/mqtt');
-const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { pool, testConnection } = require('./config/database');
+const { testConnection: testInflux } = require('./config/influxdb');
+const { initMqtt, isMqttConnected } = require('./config/mqtt');
+const authRoutes = require('./routes/auth');
 
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3010;
 
-app.use(pinoHttp({ logger }));
+// ==================== MIDDLEWARES ====================
 app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  credentials: true
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+app.use(express.json());
+app.use(pinoHttp({ logger }));
 
-app.get('/health', async (req, res) => {
-  const health = {
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV,
-    version: require('../package.json').version,
-    services: {
-      postgres: false,
-      influxdb: false,
-      mqtt: false
-    }
-  };
-
-  try {
-    try {
-      await testPostgres();
-      health.services.postgres = true;
-    } catch (err) {
-      logger.warn({ err }, 'PostgreSQL health check failed');
-    }
-
-    try {
-      await testInflux();
-      health.services.influxdb = true;
-    } catch (err) {
-      logger.warn({ err }, 'InfluxDB health check failed');
-    }
-
-    const mqttStatus = getMQTTStatus();
-    health.services.mqtt = mqttStatus.connected;
-
-    const allServicesOk = Object.values(health.services).every(status => status === true);
-    health.status = allServicesOk ? 'ok' : 'degraded';
-
-    const statusCode = allServicesOk ? 200 : 503;
-    res.status(statusCode).json(health);
-  } catch (err) {
-    logger.error({ err }, 'Health check error');
-    health.status = 'error';
-    res.status(503).json(health);
-  }
-});
-
+// ==================== ROUTES ====================
 app.get('/', (req, res) => {
   res.json({
     message: 'EasySmart IoT Platform API',
-    version: require('../package.json').version,
+    version: '0.1.0',
     endpoints: {
       health: '/health',
-      api: '/api/v1'
-    }
+      auth: '/api/v1/auth',
+    },
   });
 });
 
-app.use(notFoundHandler);
-app.use(errorHandler);
+app.get('/health', async (req, res) => {
+  const status = { postgres: false, influxdb: false, mqtt: false };
 
-async function startServer() {
+  const withTimeout = (fn, ms) =>
+    Promise.race([
+      fn().then(() => true).catch(() => false),
+      new Promise(resolve => setTimeout(() => resolve(false), ms)),
+    ]);
+
   try {
-    logger.info('🚀 Iniciando EasySmart Backend...');
+    status.postgres = await withTimeout(testConnection, 1000);
+  } catch (e) {
+    logger.error(e, 'Postgres check failed');
+  }
 
-    logger.info('📊 Conectando ao PostgreSQL...');
-    await testPostgres();
+  try {
+    status.influxdb = await withTimeout(testInflux, 1000);
+  } catch (e) {
+    logger.error(e, 'InfluxDB check failed');
+  }
 
-    logger.info('📈 Conectando ao InfluxDB...');
-    await testInflux();
+  try {
+    status.mqtt = isMqttConnected();
+  } catch (e) {
+    logger.error(e, 'MQTT check failed');
+  }
 
-    logger.info('📡 Conectando ao MQTT...');
-    await connectMQTT();
+  const allOk = Object.values(status).every(Boolean);
+  res.status(allOk ? 200 : 503).json({
+    status: allOk ? 'ok' : 'degraded',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    version: '0.1.0',
+    services: status,
+  });
+});
 
-    const server = app.listen(PORT, () => {
-      logger.info({
-        port: PORT,
-        environment: process.env.NODE_ENV,
-        nodeVersion: process.version
-      }, `✅ Servidor rodando em http://localhost:${PORT}`);
+// ==================== ROUTES ====================
+app.use('/api/v1/auth', authRoutes);
+
+// ==================== START SERVER ====================
+(async () => {
+  try {
+    await initMqtt(); // inicia MQTT e aguarda conectar ou timeout
+    app.listen(PORT, () => {
+      logger.info(`🚀 EasySmart Backend running on http://localhost:${PORT}`);
     });
-
-    const gracefulShutdown = async (signal) => {
-      logger.info({ signal }, '⚠️  Shutdown signal recebido');
-
-      server.close(async () => {
-        logger.info('🔌 Servidor HTTP fechado');
-
-        try {
-          logger.info('🔌 Fechando conexões...');
-          
-          await disconnectMQTT();
-          await closeInflux();
-          await closePool();
-
-          logger.info('✅ Shutdown concluído');
-          process.exit(0);
-        } catch (err) {
-          logger.error({ err }, '❌ Erro durante shutdown');
-          process.exit(1);
-        }
-      });
-
-      setTimeout(() => {
-        logger.error('❌ Shutdown forçado após timeout');
-        process.exit(1);
-      }, 30000);
-    };
-
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-    process.on('uncaughtException', (err) => {
-      logger.fatal({ err }, '💥 Uncaught Exception');
-      gracefulShutdown('uncaughtException');
-    });
-
-    process.on('unhandledRejection', (reason, promise) => {
-      logger.fatal({ reason, promise }, '💥 Unhandled Rejection');
-      gracefulShutdown('unhandledRejection');
-    });
-
   } catch (err) {
-    logger.fatal({ err }, '❌ Falha ao iniciar servidor');
+    logger.error({ err }, 'Erro ao iniciar o servidor');
     process.exit(1);
   }
-}
-
-startServer();
-
-module.exports = app;
+})();
