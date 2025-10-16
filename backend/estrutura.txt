@@ -1,0 +1,32 @@
+.
+├── estrutura.txt
+├── migrations
+│   └── 1760638437331_create-initial-schema.js
+├── package.json
+├── package-lock.json
+├── src
+│   ├── config
+│   │   ├── database.js
+│   │   ├── influxdb.js
+│   │   ├── logger.js
+│   │   └── mqtt.js
+│   ├── controllers
+│   │   ├── authController.js
+│   │   ├── deviceApiController.js
+│   │   └── deviceController.js
+│   ├── middleware
+│   │   ├── auth.js
+│   │   └── errorHandler.js
+│   ├── models
+│   ├── routes
+│   │   ├── auth.js
+│   │   └── devices.js
+│   ├── server.js
+│   ├── services
+│   │   └── mqttService.js
+│   └── utils
+│       └── token.js
+├── tests
+└── test-server.js
+
+11 directories, 19 files
