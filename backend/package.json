@@ -1,0 +1,29 @@
+{
+  "name": "easysmart-backend",
+  "version": "0.1.0",
+  "description": "EasySmart IoT Platform Backend API",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "@influxdata/influxdb-client": "^1.35.0",
+    "mqtt": "^5.14.1",
+    "cors": "^2.8.5",
+    "helmet": "^7.2.0",
+    "dotenv": "^16.4.5",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "pino-pretty": "^13.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  },
+  "engines": {
+    "node": ">=18.19.0"
+  }
+}
