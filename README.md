@@ -463,3 +463,107 @@ MIT License - Veja [LICENSE](LICENSE) para detalhes.
 **Built with ❤️ for the IoT community**
 
 **Last Updated:** 2025-10-16
+
+---
+
+## 🤖 Diretrizes para IA (Claude/ChatGPT)
+
+### Contexto do Projeto
+
+Este é um projeto **multi-tenant SaaS IoT** que usa **ESPHome** para firmware de dispositivos ESP32/ESP8266 e uma plataforma web customizada para gerenciamento.
+
+### Arquitetura Atual
+
+**Infraestrutura (~/docker/):**
+- ✅ PostgreSQL (porta 5432) - Metadata
+- ✅ InfluxDB (porta 8086) - Time-series
+- ✅ Mosquitto MQTT (portas 1883/9001) - Message broker
+- ✅ ESPHome (porta 6052) - Device firmware compiler
+- ✅ Home Assistant, Portainer, Watchtower
+
+**Aplicação (~/easysmart-platform/):**
+- 🚧 Backend Node.js (porta 3001) - EM DESENVOLVIMENTO
+- 🚧 Frontend React (porta 3000) - EM DESENVOLVIMENTO
+- 📋 ESPHome templates - A CRIAR
+
+### Estado Atual do Desenvolvimento
+
+**✅ COMPLETO:**
+1. Infraestrutura Docker rodando
+2. Repositório GitHub limpo e estruturado
+3. Documentação inicial (README, CHANGELOG, LICENSE)
+4. Estrutura de diretórios criada
+
+**🚧 EM PROGRESSO:**
+1. Backend API (precisa ser criado)
+2. Frontend React (precisa ser criado)
+3. ESPHome templates (precisa ser criado)
+
+**📋 PRÓXIMOS PASSOS:**
+1. Criar `backend/package.json` com dependências
+2. Criar `backend/src/config/` (database, influxdb, mqtt)
+3. Criar `backend/src/services/mqttService.js` (subscribe MQTT)
+4. Criar template ESPHome básico
+
+### Credenciais e Configuração
+
+- **Servidor:** Ubuntu 24.04 LTS (server.local)
+- **Usuário:** rodrigo
+- **Infraestrutura:** `~/docker/`
+- **Projeto:** `~/easysmart-platform/`
+- **Senhas:** `~/docker/.env` (NÃO commitado)
+- **GitHub:** https://github.com/rodrigo-s-lange/easysmart-platform
+
+### Regras de Desenvolvimento
+
+1. **Um passo de cada vez** - Aguardar confirmação antes de prosseguir
+2. **Testar cada etapa** - Validar antes de avançar
+3. **Commits frequentes** - Usar Conventional Commits (feat, fix, docs)
+4. **Código completo** - Sem placeholders, sempre funcional
+5. **EOF format** - Usar `cat > file << 'EOF'` para criar arquivos
+6. **Documentar** - Atualizar README quando necessário
+
+### Convenção de Commits
+```
+feat: Nova funcionalidade
+fix: Correção de bug
+docs: Apenas documentação
+refactor: Refatoração sem mudar funcionalidade
+test: Adicionar testes
+chore: Manutenção, configs, dependencies
+```
+
+### Comandos Úteis
+```bash
+# Infraestrutura
+cd ~/docker && docker compose ps
+
+# Projeto
+cd ~/easysmart-platform && git status
+
+# Logs
+docker logs postgres --tail 20
+docker logs influxdb --tail 20
+docker logs mosquitto --tail 20
+
+# Testar MQTT
+docker exec mosquitto mosquitto_pub -h localhost -u devices -P 'SENHA_DO_ENV' -t 'test' -m 'hello'
+```
+
+### Perfil do Desenvolvedor
+
+- **Programação:** Pleno/Sênior (Node.js, React, Python, C++)
+- **Embedded:** Avançado (ESP32, ESP8266, protocols)
+- **Linux:** Intermediário (precisa de passos detalhados)
+- **Git:** Intermediário (conhece conceitos, precisa de boas práticas)
+
+### Preferências de Comunicação
+
+- ✅ Perguntas contextualizadas antes de executar
+- ✅ Buscar documentação oficial sempre
+- ✅ Ser direto e técnico
+- ✅ Sugerir commits em pontos estratégicos
+- ✅ Organizar código em arquivos separados
+- ❌ Não usar emojis excessivos
+- ❌ Não pular etapas de teste
+
