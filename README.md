@@ -1,5 +1,8 @@
 # EasySmart IoT Platform - Projeto em construção
 
+**Última atualização:** 2025-10-17 / 09:25AM 
+**Versão:** 0.2.0 
+
 > **Plataforma IoT Industrial Multi-Tenant para Automação e Monitoramento**
 
 ![Version](https://img.shields.io/badge/version-0.2.0-blue)
@@ -1605,6 +1608,352 @@ components/
 
 ## 🤖 Colaboração com LLMs
 
-### **Para Claude/ChatGPT em Sessões Futuras**
+### **Para Claude/ChatGPT/Grok/DeepSeek/etc em Sessões Futuras**
 
-Este projeto foi desenvolvido em **colaboração humano-IA**.
+Este projeto foi desenvolvido em **colaboração humano-IA**. Se você é uma IA / LLM continuando o trabalho:
+
+#### **1. Leia Primeiro**
+- Este README completo
+- `CHANGELOG.md` para histórico de mudanças
+- Última seção do README (contexto de decisões)
+
+#### **2. Entenda o Contexto**
+- Multi-tenancy é **CRÍTICO** - sempre filtrar por `tenant_id`
+- Schema PostgreSQL real (colunas: id, name, status, last_seen, metadata)
+- ESPHome é estratégia atual para validação de mercado
+- Futuro: Firmware proprietário com YAML guiado por LLMs
+- Foco industrial (não copiar Home Assistant, mas inspirar-se)
+
+#### **3. Antes de Começar Qualquer Tarefa**
+
+```bash
+# Verificar versões
+node --version  # Deve ser v22.20.0
+cd ~/easysmart-platform
+
+# Backend health check
+cd backend
+npm run dev
+# Outro terminal:
+curl http://localhost:3010/health | jq
+
+# Frontend status
+cd ../frontend
+npm run dev
+# Abrir: http://localhost:5173
+
+# Git status
+git status
+git log --oneline -5
+```
+
+#### **4. Validar Multi-Tenancy SEMPRE**
+
+Antes de implementar qualquer feature relacionada a devices:
+
+```bash
+# Login como admin
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:3010/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@easysmart.io","password":"admin123456"}' \
+  | jq -r '.tokens.accessToken')
+
+# Login como usuário comum
+JOAO_TOKEN=$(curl -s -X POST http://localhost:3010/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"joao.silva@techsolutions.com","password":"senha123456"}' \
+  | jq -r '.tokens.accessToken')
+
+# Testar isolamento
+echo "Admin devices: $(curl -s http://localhost:3010/api/v1/devices -H "Authorization: Bearer $ADMIN_TOKEN" | jq '. | length')"
+echo "João devices: $(curl -s http://localhost:3010/api/v1/devices -H "Authorization: Bearer $JOAO_TOKEN" | jq '. | length')"
+```
+
+**Resultado esperado:** Cada usuário vê apenas seus próprios devices.
+
+#### **5. Padrões de Código Obrigatórios**
+
+**Backend:**
+```javascript
+// ✅ SEMPRE incluir tenant_id nas queries
+const getDevices = async (req, res) => {
+  const tenantId = req.user.tenantId; // Do JWT via middleware
+  const result = await pool.query(
+    'SELECT * FROM devices WHERE tenant_id = $1',
+    [tenantId]
+  );
+  res.json(result.rows);
+};
+
+// ❌ NUNCA fazer query sem filtro de tenant
+const result = await pool.query('SELECT * FROM devices'); // ERRADO!
+```
+
+**Frontend:**
+```typescript
+// ✅ Usar React Query para data fetching
+import { useQuery } from '@tanstack/react-query';
+
+const { data: devices, isLoading } = useQuery({
+  queryKey: ['devices'],
+  queryFn: () => api.get('/devices').then(res => res.data),
+  refetchInterval: 5000, // Polling
+});
+
+// ❌ NUNCA usar localStorage em artifacts
+// ✅ Usar Zustand ou React state
+```
+
+#### **6. Quando Criar Artifacts**
+
+**Criar artifacts para:**
+- Componentes completos (>20 linhas)
+- Funcionalidade 100% implementada
+- Sem TODOs ou placeholders
+- Código testável
+
+**Não criar artifacts para:**
+- Snippets pequenos (<20 linhas)
+- Configs simples
+- Documentação inline
+
+#### **7. Checklist Antes de Commit**
+
+```bash
+# Backend
+cd backend
+npm run dev  # Deve iniciar sem erros
+
+# Frontend
+cd frontend
+npm run lint  # Deve retornar 0 errors
+npm run dev   # Testar no navegador
+
+# Git
+git status
+git diff     # Revisar mudanças
+git add .
+git commit -m "tipo: mensagem clara"  # Conventional Commits
+git push origin main
+```
+
+#### **8. Mensagens de Commit (Conventional Commits)**
+
+```bash
+feat: adiciona componente DeviceList
+fix: corrige filtro multi-tenancy em devices API
+refactor: separa DeviceCard em componentes menores
+docs: atualiza API reference com novos endpoints
+style: formata código com prettier
+test: adiciona testes unitários para auth
+chore: atualiza dependências
+```
+
+#### **9. Quando Parar e Pedir Ajuda**
+
+**SEMPRE pergunte ao desenvolvedor quando encontrar:**
+- Erros de schema do banco (colunas não existem)
+- Multi-tenancy vazando dados entre tenants
+- Decisões que impactam arquitetura geral
+- Performance issues significativos
+- Dúvidas sobre requisitos funcionais
+- Necessidade de alterar estrutura do projeto
+
+**NÃO ASSUMA - PERGUNTE!**
+
+---
+
+##  Decisões Arquiteturais Importantes
+
+### **Registradas neste Projeto:**
+
+1. **Sidebar Colapsável** (vs Top Nav)
+   - Decisão: Sidebar
+   - Justificativa: Escalável para 10+ seções futuras
+   - Impacto: Layout base do sistema
+
+2. **Grid Cards** (vs Table)
+   - Decisão: Grid cards no dashboard
+   - Justificativa: Overview visual rápido para múltiplas entities
+   - Impacto: UX do sistema
+
+3. **Página Dedicada** (vs Modal) para Device Detail
+   - Decisão: Página com rota `/devices/:id`
+   - Justificativa: Necessário para 20-30 entities por device
+   - Impacto: Estrutura de navegação
+
+4. **React Query** (vs Zustand) para Data Fetching
+   - Decisão: React Query para devices/telemetria
+   - Justificativa: Cache automático e refetch inteligente
+   - Impacto: Performance e DX
+
+5. **Polling Híbrido** (vs WebSocket desde o início)
+   - Decisão: Começar com polling 5s, evoluir para WebSocket
+   - Justificativa: Simplicidade no MVP
+   - Impacto: Arquitetura de real-time
+
+---
+
+##  Avisos Críticos para LLMs
+
+### **NUNCA Faça:**
+1. ❌ Queries sem filtro `tenant_id`
+2. ❌ Usar colunas antigas (`mqtt_id`, `model`, `manufacturer`)
+3. ❌ localStorage/sessionStorage em artifacts
+4. ❌ Commits sem testar multi-tenancy
+5. ❌ Assumir estrutura do banco sem verificar
+6. ❌ Criar TODOs ou placeholders em artifacts
+7. ❌ Pular etapas de validação
+
+### **SEMPRE Faça:**
+1. ✅ Filtrar por `tenant_id` em TODAS as queries de devices
+2. ✅ Usar colunas reais do schema (verificar com `\d devices`)
+3. ✅ Testar multi-tenancy após cada mudança
+4. ✅ Criar código funcional e completo
+5. ✅ Perguntar ao desenvolvedor quando em dúvida
+6. ✅ Seguir padrões estabelecidos
+7. ✅ Documentar decisões importantes
+
+---
+
+##  Template de Primeira Mensagem (Para LLMs)
+
+```
+Olá! Vou continuar o desenvolvimento do EasySmart IoT Platform.
+
+Li o README completo e entendi que:
+- Phase 2.1 está completa (Autenticação funcionando)
+- Próximo: Phase 2.2 - Device Management UI
+- Multi-tenancy é CRÍTICO (sempre filtrar por tenant_id)
+- Schema PostgreSQL: id, name, status, last_seen, metadata
+- Stack: Node 22 + Express 5 + React 18 + TypeScript
+
+Antes de começar, confirmo:
+1. Backend rodando? (porta 3010)
+2. Frontend rodando? (porta 5173)  
+3. Multi-tenancy validado?
+4. Posso começar com [tarefa específica]?
+
+Aguardo confirmação!
+```
+
+---
+
+## 💾 Estrutura de Commits Ideal
+
+```bash
+# Sessão típica de desenvolvimento
+git commit -m "feat(frontend): add Sidebar component with collapse"
+git commit -m "feat(frontend): add TopBar with user menu"
+git commit -m "feat(frontend): integrate Sidebar and TopBar in Layout"
+git commit -m "test: validate multi-tenancy in device list"
+git commit -m "docs: update README with Phase 2.2 progress"
+```
+
+**Commits pequenos e frequentes > Commits grandes e raros**
+
+---
+
+## 🎓 Lições Aprendidas (Para Referência Futura)
+
+### **O Que Funcionou Bem:**
+1. ✅ Discussão de arquitetura ANTES da implementação
+2. ✅ Decisões claras com justificativas documentadas
+3. ✅ Testes de multi-tenancy a cada feature
+4. ✅ Colaboração humano-IA com papéis bem definidos
+5. ✅ README como documentação viva
+6. ✅ Commits frequentes com mensagens claras
+
+### **O Que Evitar:**
+1. ❌ Implementar sem validar schema do banco
+2. ❌ Assumir estrutura sem confirmar com desenvolvedor
+3. ❌ Código com TODOs ou placeholders
+4. ❌ Commits grandes sem testes intermediários
+5. ❌ Pular validação de multi-tenancy
+6. ❌ Mudar decisões arquiteturais sem discussão
+
+---
+
+## 🔄 Ciclo de Desenvolvimento Recomendado
+
+```
+1. Ler README + última sessão de contexto
+2. Validar ambiente (backend + frontend rodando)
+3. Discutir tarefa com desenvolvedor
+4. Implementar feature completa (sem TODOs)
+5. Testar localmente (incluindo multi-tenancy)
+6. Commit com mensagem clara
+7. Atualizar documentação se necessário
+8. Repetir ciclo
+```
+
+---
+
+## 🎯 Métricas de Sucesso
+
+**Uma sessão de desenvolvimento é bem-sucedida quando:**
+- ✅ Código funciona sem erros
+- ✅ Multi-tenancy validado
+- ✅ Testes manuais passando
+- ✅ Commits claros e incrementais
+- ✅ Documentação atualizada
+- ✅ Nenhuma regressão introduzida
+- ✅ Desenvolvedor satisfeito com resultado
+
+---
+
+## 🌟 Filosofia do Projeto
+
+> "Qualidade > Velocidade. Melhor fazer certo da primeira vez do que refatorar depois."
+
+**Princípios:**
+1. **Segurança primeiro** - Multi-tenancy não é negociável
+2. **Código limpo** - Sem TODOs, sem placeholders
+3. **Documentação viva** - README sempre atualizado
+4. **Testes antes de commit** - Validar antes de subir
+5. **Decisões documentadas** - Justificar escolhas importantes
+6. **Colaboração transparente** - Perguntar quando em dúvida
+
+---
+
+## 📚 Recursos de Referência Rápida
+
+**Backend:**
+- Schema: `docker exec -it postgres psql -U postgres -d easysmart -c "\d devices"`
+- Health: `curl http://localhost:3010/health | jq`
+- Logs: `tail -f backend/logs/app.log` (se configurado)
+
+**Frontend:**
+- Lint: `npm run lint`
+- Build: `npm run build`
+- Preview: `npm run preview`
+
+**Git:**
+- Status: `git status --short`
+- Diff: `git diff --stat`
+- Log: `git log --oneline --graph -10`
+
+---
+
+## 🎬 Conclusão
+
+Este README é a **fonte única de informações** do projeto. Sempre que tiver dúvidas:
+
+1. Leia este documento primeiro
+2. Verifique o código existente
+3. Teste localmente
+4. Pergunte ao desenvolvedor se ainda tiver dúvidas
+
+**Boa sorte no desenvolvimento!**
+
+---
+
+**Última atualização:** 2025-10-17  
+**Versão:** 0.2.0  
+**Status:** Phase 2.1 Complete ✅ | Phase 2.2 Ready to Start 🚀  
+**Próxima tarefa:** Implementar Sidebar + Layout base
+
+---
+
+*Desenvolvido com ❤️ em Curitiba/PR - Brasil*
+*Powered by Rodrigo Lange + AI Collaboration*
