@@ -1,96 +1,143 @@
-'use strict';
+const pool = require('../config/database');
+const logger = require('../config/logger');
 
-const { pool } = require('../config/database');
-const pino = require('pino');
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
-
-/**
- * Retorna todos os devices.
- */
-async function getAllDevices(req, res) {
+// GET /api/v1/devices - Lista todos os devices do tenant
+const getDevices = async (req, res) => {
   try {
+    const tenantId = req.user.tenantId; // Pega do JWT
+
     const result = await pool.query(
-      `SELECT id, name, status, device_token, last_seen, metadata
-       FROM devices
-       ORDER BY last_seen DESC`
+      `SELECT 
+        id,
+        name,
+        status,
+        last_seen,
+        device_token,
+        metadata,
+        created_at
+      FROM devices
+      WHERE tenant_id = $1
+      ORDER BY created_at DESC`,
+      [tenantId]
     );
+
     res.json(result.rows);
-  } catch (err) {
-    logger.error({ err }, 'Erro ao listar devices');
-    res.status(500).json({ message: 'Erro ao listar devices' });
+  } catch (error) {
+    logger.error('Erro ao listar devices', { error: error.message });
+    res.status(500).json({ error: 'Erro ao listar devices' });
   }
-}
+};
 
-/**
- * Retorna detalhes de um device específico.
- */
-async function getDeviceById(req, res) {
-  const { id } = req.params;
+// GET /api/v1/devices/:id - Detalhes de um device específico
+const getDeviceById = async (req, res) => {
   try {
+    const { id } = req.params;
+    const tenantId = req.user.tenantId;
+
     const result = await pool.query(
-      `SELECT id, name, status, device_token, metadata, last_seen
-       FROM devices
-       WHERE id = $1 LIMIT 1`,
-      [id]
+      `SELECT 
+        d.id,
+        d.name,
+        d.model,
+        d.manufacturer,
+        d.status,
+        d.last_seen,
+        d.device_token,
+        d.metadata,
+        d.created_at,
+        COUNT(e.id) as entity_count
+      FROM devices d
+      LEFT JOIN entities e ON e.device_id = d.id
+      WHERE d.id = $1 AND d.tenant_id = $2
+      GROUP BY d.id`,
+      [id, tenantId]
     );
-    if (result.rows.length === 0)
-      return res.status(404).json({ message: 'Device não encontrado' });
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Device não encontrado' });
+    }
+
     res.json(result.rows[0]);
-  } catch (err) {
-    logger.error({ err, id }, 'Erro ao buscar device');
-    res.status(500).json({ message: 'Erro ao buscar device' });
+  } catch (error) {
+    logger.error('Erro ao buscar device', { error: error.message, deviceId: req.params.id });
+    res.status(500).json({ error: 'Erro ao buscar device' });
   }
-}
+};
 
-/**
- * Retorna entities associadas a um device.
- */
-async function getEntitiesByDevice(req, res) {
-  const { id } = req.params;
+// GET /api/v1/devices/:id/entities - Lista entities de um device
+const getDeviceEntities = async (req, res) => {
   try {
+    const { id } = req.params;
+    const tenantId = req.user.tenantId;
+
+    // Primeiro verifica se device pertence ao tenant
+    const deviceCheck = await pool.query(
+      'SELECT id FROM devices WHERE id = $1 AND tenant_id = $2',
+      [id, tenantId]
+    );
+
+    if (deviceCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Device não encontrado' });
+    }
+
     const result = await pool.query(
-      `SELECT entity_id, entity_type, name, unit, device_class, metadata
-       FROM entities
-       WHERE device_id = $1
-       ORDER BY name ASC`,
+      `SELECT 
+        id,
+        entity_id,
+        entity_type,
+        device_class,
+        name,
+        unit_of_measurement,
+        state,
+        attributes,
+        last_updated
+      FROM entities
+      WHERE device_id = $1
+      ORDER BY entity_type, name`,
       [id]
     );
+
     res.json(result.rows);
-  } catch (err) {
-    logger.error({ err, id }, 'Erro ao listar entities');
-    res.status(500).json({ message: 'Erro ao listar entities' });
+  } catch (error) {
+    logger.error('Erro ao listar entities', { error: error.message, deviceId: req.params.id });
+    res.status(500).json({ error: 'Erro ao listar entities' });
   }
-}
+};
 
-/**
- * Remove um device e suas entities.
- */
-async function deleteDevice(req, res) {
-  const { id } = req.params;
-  const client = await pool.connect();
+// DELETE /api/v1/devices/:id - Deleta device (e suas entities em cascata)
+const deleteDevice = async (req, res) => {
   try {
-    await client.query('BEGIN');
-    await client.query('DELETE FROM entities WHERE device_id = $1', [id]);
-    const delRes = await client.query('DELETE FROM devices WHERE id = $1 RETURNING id', [id]);
-    await client.query('COMMIT');
+    const { id } = req.params;
+    const tenantId = req.user.tenantId;
 
-    if (delRes.rowCount === 0)
-      return res.status(404).json({ message: 'Device não encontrado' });
+    const result = await pool.query(
+      'DELETE FROM devices WHERE id = $1 AND tenant_id = $2 RETURNING id, name',
+      [id, tenantId]
+    );
 
-    logger.info(`🗑️ Device [${id}] removido`);
-    res.json({ message: 'Device removido com sucesso' });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    logger.error({ err, id }, 'Erro ao deletar device');
-    res.status(500).json({ message: 'Erro ao deletar device' });
-  } finally {
-    client.release();
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Device não encontrado' });
+    }
+
+    logger.info('Device deletado com sucesso', { 
+      deviceId: id, 
+      deviceName: result.rows[0].name,
+      tenantId 
+    });
+
+    res.json({ 
+      message: 'Device deletado com sucesso',
+      device: result.rows[0]
+    });
+  } catch (error) {
+    logger.error('Erro ao deletar device', { error: error.message, deviceId: req.params.id });
+    res.status(500).json({ error: 'Erro ao deletar device' });
   }
-}
+};
 
 module.exports = {
-  getAllDevices,
+  getDevices,
   getDeviceById,
-  getEntitiesByDevice,
+  getDeviceEntities,
   deleteDevice,
 };

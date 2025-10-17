@@ -42,7 +42,8 @@ export default function Register() {
     setError(null)
 
     try {
-      const { confirmPassword, ...registerData } = data
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { confirmPassword: _, ...registerData } = data
       const response = await authApi.register(registerData)
       const { user, tokens } = response.data
 
@@ -51,8 +52,9 @@ export default function Register() {
       setUser(user)
 
       navigate('/dashboard')
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao criar conta')
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } } }
+      setError(error.response?.data?.error || 'Erro ao criar conta')
     } finally {
       setIsLoading(false)
     }

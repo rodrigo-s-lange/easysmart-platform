@@ -1,24 +1,20 @@
-'use strict';
-
 const express = require('express');
 const router = express.Router();
-const {
-  getAllDevices,
-  getDeviceById,
-  getEntitiesByDevice,
-  deleteDevice,
-} = require('../controllers/deviceApiController');
+const { requireAuth } = require('../middleware/auth');
+const deviceController = require('../controllers/deviceController');
+const deviceApiController = require('../controllers/deviceApiController');
 
-// Listar todos os devices
-router.get('/', getAllDevices);
+// Todas as rotas requerem autenticação
+router.use(requireAuth);
 
-// Obter detalhes de um device
-router.get('/:id', getDeviceById);
+// Device Management (provisioning, claiming)
+router.post('/provision', deviceController.provisionDevice);
+router.post('/claim', deviceController.claimDevice);
 
-// Listar entities de um device
-router.get('/:id/entities', getEntitiesByDevice);
-
-// Deletar um device
-router.delete('/:id', deleteDevice);
+// Device API (CRUD)
+router.get('/', deviceApiController.getDevices);
+router.get('/:id', deviceApiController.getDeviceById);
+router.get('/:id/entities', deviceApiController.getDeviceEntities);
+router.delete('/:id', deviceApiController.deleteDevice);
 
 module.exports = router;
