@@ -1,5 +1,8 @@
 # EasySmart IoT Platform - Projeto em construção
 
+**Última atualização:** 2025-10-17 10h10am 
+**Versão:** 0.2.1  
+
 > **Plataforma IoT Industrial Multi-Tenant para Automação e Monitoramento**
 
 ![Version](https://img.shields.io/badge/version-0.2.1-blue)
