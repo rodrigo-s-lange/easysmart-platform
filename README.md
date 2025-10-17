@@ -1361,7 +1361,7 @@ Projeto desenvolvido em colaboração:
 - **Issues:** https://github.com/rodrigo-s-lange/easysmart-platform/issues
 - **Telefone** - +5541988360405 Whatsapp
 - **Email (Gmail)** - rodrigosilvalange@gmail.com
-- **Local (CWB)** - Curitba/PR - Brasil
+- **Local (CWB)** - Curitiba/PR - Brasil
 
 ---
 
