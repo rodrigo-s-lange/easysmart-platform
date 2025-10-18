@@ -78,14 +78,23 @@ EasySmart é uma plataforma IoT industrial multi-tenant focada em:
 - [x] Design profissional (dark theme + gradientes)
 - [x] Multi-tenancy validado e funcionando
 
+### ✅ Concluído Recentemente
+
+#### **Phase 2.1.5: Role System & Admin Base - Sprint 1** ✅ (Concluído: 2025-10-18)
+- [x] Sistema de roles (super_admin, tenant_admin, user)
+- [x] Migration add role column
+- [x] Middleware requireSuperAdmin
+- [x] AuthController atualizado (role no JWT)
+- [x] Endpoint /users/me
+- [x] Testes validados (login, JWT, frontend)
+
 ### 🚧 Em Desenvolvimento
 
-#### **Phase 2.1.5: Role System & Admin Base** (Agora - 4-6h)
-- [ ] Sistema de roles (super_admin, tenant_admin, user)
+#### **Phase 2.1.5: Role System & Admin Base - Sprint 2** (Agora - 2-3h)
 - [ ] Admin routes backend (tenants, devices, metrics)
-- [ ] Middleware requireSuperAdmin
-- [ ] Impersonate functionality
-- [ ] Admin guard frontend
+- [ ] AdminController completo
+- [ ] Testar isolamento multi-tenancy
+- [ ] Implementar impersonate
 
 #### **Phase 2.2: Device Management UI** (Próximo - 8-10h)
 - [ ] Sidebar navigation (colapsável + roles)
