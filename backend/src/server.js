@@ -13,6 +13,7 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const authRoutes = require('./routes/auth');
 const deviceRoutes = require('./routes/devices');
+const adminRoutes = require('./routes/admin');
 const telemetryRoutes = require('./routes/telemetry');
 
 const app = express();
@@ -90,6 +91,7 @@ app.get('/', (req, res) => {
 // Rotas
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/devices', deviceRoutes);
+app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/telemetry', telemetryRoutes);
 
 app.use(notFoundHandler);
