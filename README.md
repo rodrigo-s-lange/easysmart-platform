@@ -1,11 +1,11 @@
 # EasySmart IoT Platform - Projeto em construção
 
-**Última atualização:** 2025-10-17 10h10am 
-**Versão:** 0.2.1  
+**Última atualização:** 2025-10-18 11h30am 
+**Versão:** 0.3.0  
 
 > **Plataforma IoT Industrial Multi-Tenant para Automação e Monitoramento**
 
-![Version](https://img.shields.io/badge/version-0.2.1-blue)
+![Version](https://img.shields.io/badge/version-0.3.0-blue)
 ![Node](https://img.shields.io/badge/node-22.20.0-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -487,187 +487,470 @@ Remove device (e suas entities em cascata).
 
 ## 🔧 Admin API (SUPER_ADMIN apenas)
 
-**Base URL:** `http://localhost:3010/api/v1/admin`
+📖 Admin API - Guia de Uso Completo
+🎯 Visão Geral
+As rotas administrativas são protegidas e requerem:
 
-**Headers:**
-```
-Authorization: Bearer {accessToken}
-```
+✅ Autenticação válida (JWT token)
+✅ Role super_admin
 
-### `GET /admin/tenants`
-Lista todos os tenants da plataforma.
+Base URL: http://localhost:3010/api/v1/admin
 
-**Response:**
-```json
-[
-  {
+🔐 Autenticação
+Todas as requisições devem incluir o header de autorização:
+bashAuthorization: Bearer {accessToken}
+Exemplo de obtenção do token:
+bash# Login como super_admin
+TOKEN=$(curl -s -X POST http://localhost:3010/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@easysmart.io","password":"admin123456"}' \
+  | jq -r '.tokens.accessToken')
+
+# Usar token nas requisições admin
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3010/api/v1/admin/tenants
+
+📋 1. GET /admin/tenants
+Descrição: Lista todos os tenants da plataforma com métricas agregadas.
+Método: GET
+URL: /api/v1/admin/tenants
+Auth: Requer super_admin
+Response:
+json{
+  "tenants": [
+    {
+      "id": "uuid",
+      "name": "Tech Solutions Ltda",
+      "created_at": "2025-10-17T12:00:00Z",
+      "user_count": "2",
+      "device_count": "5",
+      "status": "active"
+    },
+    {
+      "id": "uuid",
+      "name": "Indústria XYZ",
+      "created_at": "2025-10-16T08:30:00Z",
+      "user_count": "1",
+      "device_count": "0",
+      "status": "inactive"
+    }
+  ],
+  "total": 2
+}
+Status do Tenant:
+
+active: Possui devices cadastrados
+inactive: Sem devices cadastrados
+
+Exemplo cURL:
+bashcurl -X GET http://localhost:3010/api/v1/admin/tenants \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | jq '.'
+
+📊 2. GET /admin/tenants/:id
+Descrição: Detalhes completos de um tenant específico incluindo usuários, devices e métricas.
+Método: GET
+URL: /api/v1/admin/tenants/{tenant_id}
+Auth: Requer super_admin
+Response:
+json{
+  "tenant": {
     "id": "uuid",
     "name": "Tech Solutions Ltda",
-    "created_at": "2025-10-17T...",
+    "created_at": "2025-10-17T12:00:00Z",
     "user_count": 2,
-    "device_count": 5,
-    "status": "active"
-  }
-]
-```
-
-### `GET /admin/tenants/:id`
-Detalhes de um tenant específico (devices, users, métricas).
-
-### `POST /admin/tenants/:id/impersonate`
-Gera token para logar como tenant (suporte técnico).
-
-**Body:**
-```json
-{
-  "reason": "Suporte técnico - debug de sensores"
-}
-```
-
-**Response:**
-```json
-{
-  "tokens": {
-    "accessToken": "jwt...",
-    "refreshToken": "rt_..."
+    "device_count": 5
   },
+  "users": [
+    {
+      "id": "uuid",
+      "email": "admin@techsolutions.com",
+      "role": "tenant_admin",
+      "created_at": "2025-10-17T12:00:00Z"
+    },
+    {
+      "id": "uuid",
+      "email": "operator@techsolutions.com",
+      "role": "user",
+      "created_at": "2025-10-17T14:30:00Z"
+    }
+  ],
+  "devices": [
+    {
+      "id": "uuid",
+      "name": "Sensor Caldeira 1",
+      "status": "online",
+      "last_seen": "2025-10-18T10:00:00Z",
+      "created_at": "2025-10-17T13:00:00Z",
+      "entity_count": "3"
+    }
+  ],
+  "metrics": {
+    "total_devices": "5",
+    "online_devices": "3",
+    "total_entities": "15"
+  }
+}
+Exemplo cURL:
+bashTENANT_ID="seu-tenant-id-aqui"
+curl -X GET "http://localhost:3010/api/v1/admin/tenants/$TENANT_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | jq '.'
+
+🎭 3. POST /admin/tenants/:id/impersonate
+Descrição: Gera tokens para "logar como" um tenant específico (recurso de suporte técnico).
+Método: POST
+URL: /api/v1/admin/tenants/{tenant_id}/impersonate
+Auth: Requer super_admin
+Body:
+json{
+  "reason": "Suporte técnico - debug de sensores offline"
+}
+Validações:
+
+✅ reason é obrigatório
+✅ Mínimo de 10 caracteres
+✅ Tenant deve ter pelo menos 1 tenant_admin
+
+Response:
+json{
+  "message": "Impersonate realizado com sucesso",
   "tenant": {
     "id": "uuid",
     "name": "Tech Solutions Ltda"
   },
-  "expires_in": "15m"
-}
-```
-
-### `GET /admin/devices`
-Lista TODOS os devices de TODOS os tenants.
-
-**Query Params:**
-- `tenant_id`: Filtrar por tenant
-- `status`: online, offline, all
-- `limit`: Paginação
-- `offset`: Paginação
-
-### `GET /admin/metrics`
-Métricas agregadas da plataforma.
-
-**Response:**
-```json
-{
-  "platform": {
-    "total_tenants": 15,
-    "total_devices": 127,
-    "online_devices": 98,
-    "total_users": 38
+  "user": {
+    "id": "uuid",
+    "email": "admin@techsolutions.com",
+    "role": "tenant_admin"
   },
-  "telemetry_24h": {
-    "total_messages": 45230,
-    "messages_per_hour": 1885
+  "tokens": {
+    "accessToken": "eyJ...",
+    "refreshToken": "rt_..."
+  },
+  "expires_in": "15m",
+  "warning": "Use apenas para suporte técnico. Todas ações são auditadas."
+}
+Auditoria:
+Todas ações de impersonate são registradas nos logs com:
+
+ID do super_admin
+Email do super_admin
+Tenant alvo
+Usuário impersonado
+Motivo fornecido
+Timestamp
+
+Exemplo cURL:
+bashTENANT_ID="seu-tenant-id-aqui"
+curl -X POST "http://localhost:3010/api/v1/admin/tenants/$TENANT_ID/impersonate" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reason": "Suporte técnico - verificar configuração de sensores"
+  }' \
+  | jq '.'
+
+# Usar tokens retornados para acessar como tenant
+TENANT_TOKEN=$(echo $RESPONSE | jq -r '.tokens.accessToken')
+curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3010/api/v1/devices
+
+🔌 4. GET /admin/devices
+Descrição: Lista TODOS os devices de TODOS os tenants (visão cross-tenant).
+Método: GET
+URL: /api/v1/admin/devices
+Auth: Requer super_admin
+Query Parameters:
+ParâmetroTipoObrigatórioDescriçãoValorestenant_idUUIDNãoFiltrar por tenant específicoUUID do tenantstatusStringNãoFiltrar por statusonline, offline, unclaimed, alllimitIntegerNãoItens por páginaPadrão: 50, Max: 100offsetIntegerNãoPaginaçãoPadrão: 0
+Response:
+json{
+  "devices": [
+    {
+      "id": "uuid",
+      "name": "Sensor Caldeira 1",
+      "status": "online",
+      "last_seen": "2025-10-18T10:00:00Z",
+      "created_at": "2025-10-17T13:00:00Z",
+      "tenant_id": "uuid",
+      "tenant_name": "Tech Solutions Ltda",
+      "entity_count": "3"
+    }
+  ],
+  "pagination": {
+    "total": 127,
+    "limit": 50,
+    "offset": 0,
+    "hasMore": true
   }
 }
-```
+Exemplos cURL:
+bash# Listar todos devices (primeira página)
+curl -X GET "http://localhost:3010/api/v1/admin/devices?limit=10" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | jq '.'
 
----
+# Filtrar por tenant
+curl -X GET "http://localhost:3010/api/v1/admin/devices?tenant_id=$TENANT_ID&limit=20" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | jq '.'
 
-## 📊 Telemetry API
+# Filtrar apenas devices online
+curl -X GET "http://localhost:3010/api/v1/admin/devices?status=online&limit=50" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | jq '.'
 
-### `GET /telemetry/:deviceId/latest/:entityId`
-Último valor de uma entity.
+# Paginação (próxima página)
+curl -X GET "http://localhost:3010/api/v1/admin/devices?limit=50&offset=50" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | jq '.'
 
-### `GET /telemetry/:deviceId/:entityId`
-Série temporal com agregação.
-
-**Query Params:**
-- `start`: -6h, -24h, ISO timestamp
-- `stop`: now(), ISO timestamp
-- `window`: 1m, 5m, 1h
-- `aggregation`: mean, max, min, sum
-
-**Response:**
-```json
-{
-  "data": [
-    {"time": "2025-10-17T09:00:00Z", "value": 23.2},
-    {"time": "2025-10-17T09:05:00Z", "value": 23.5}
-  ],
-  "unit": "°C",
-  "aggregation": "mean",
-  "window": "5m"
+📊 5. GET /admin/metrics
+Descrição: Métricas agregadas de toda a plataforma.
+Método: GET
+URL: /api/v1/admin/metrics
+Auth: Requer super_admin
+Response:
+json{
+  "platform": {
+    "total_tenants": 15,
+    "new_tenants_30d": 3,
+    "total_users": 38,
+    "new_users_30d": 7,
+    "total_devices": 127,
+    "online_devices": 98,
+    "new_devices_30d": 15,
+    "active_devices_24h": 92
+  },
+  "users": {
+    "total": 38,
+    "super_admins": 1,
+    "tenant_admins": 15,
+    "regular_users": 22
+  },
+  "devices": {
+    "total": 127,
+    "online": 98,
+    "offline": 27,
+    "unclaimed": 2
+  },
+  "entities": {
+    "total": 384,
+    "devices_with_entities": 125,
+    "sensors": 320,
+    "switches": 45,
+    "binary_sensors": 19
+  },
+  "activity": {
+    "active_sessions": 42,
+    "logins_24h": 18
+  },
+  "timestamp": "2025-10-18T10:48:25.193Z"
 }
-```
+Métricas Incluídas:
+Platform:
 
-### `GET /telemetry/metrics`
-Estatísticas do Influx Writer.
+total_tenants: Total de tenants cadastrados
+new_tenants_30d: Novos tenants nos últimos 30 dias
+total_users: Total de usuários na plataforma
+new_users_30d: Novos usuários nos últimos 30 dias
+total_devices: Total de devices cadastrados
+online_devices: Devices atualmente online
+new_devices_30d: Novos devices nos últimos 30 dias
+active_devices_24h: Devices que enviaram dados nas últimas 24h
 
----
+Users:
 
-## 🗄️ Database Schema
+Distribuição por role (super_admins, tenant_admins, regular_users)
 
-### **PostgreSQL**
+Devices:
 
-#### **tenants**
-```sql
-CREATE TABLE tenants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT now()
-);
-```
+Distribuição por status (online, offline, unclaimed)
 
-#### **users**
-```sql
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID REFERENCES tenants(id),
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  role TEXT DEFAULT 'user',
-  created_at TIMESTAMP DEFAULT now()
-);
-```
+Entities:
 
-#### **devices**
-```sql
-CREATE TABLE devices (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID REFERENCES tenants(id),
-  name TEXT NOT NULL,
-  device_token TEXT NOT NULL UNIQUE,
-  status TEXT DEFAULT 'unclaimed',
-  last_seen TIMESTAMP,
-  metadata JSONB,
-  created_at TIMESTAMP DEFAULT now()
-);
+Total de entities
+Devices com entities configuradas
+Distribuição por tipo (sensors, switches, binary_sensors)
 
-CREATE INDEX idx_devices_tenant ON devices(tenant_id);
-```
+Activity:
 
-#### **entities**
-```sql
-CREATE TABLE entities (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  device_id UUID REFERENCES devices(id) ON DELETE CASCADE,
-  entity_id TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  device_class TEXT,
-  name TEXT,
-  unit_of_measurement TEXT,
-  state TEXT,
-  attributes JSONB,
-  last_updated TIMESTAMP,
-  UNIQUE(device_id, entity_id)
-);
-```
+active_sessions: Sessões ativas (refresh tokens válidos)
+logins_24h: Logins nas últimas 24 horas
 
-### **InfluxDB**
+Exemplo cURL:
+bashcurl -X GET http://localhost:3010/api/v1/admin/metrics \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | jq '.'
 
-**Measurement:** `telemetry`
+🔒 Segurança e Controle de Acesso
+Middleware requireSuperAdmin
+Todas as rotas admin são protegidas pelo middleware requireSuperAdmin:
+Fluxo de Validação:
+1. Request chega no endpoint /admin/*
+   ↓
+2. Middleware requireAuth valida JWT
+   ↓
+3. Middleware requireSuperAdmin verifica role
+   ↓
+4. Se role != 'super_admin' → 403 Forbidden
+   ↓
+5. Se role == 'super_admin' → Acesso permitido
+Response de Acesso Negado:
+json{
+  "error": "Access denied. Super admin privileges required.",
+  "requiredRole": "super_admin",
+  "currentRole": "tenant_admin"
+}
+Auditoria
+Todas ações admin são registradas nos logs estruturados:
+Login como super_admin:
+json{
+  "level": "info",
+  "msg": "Login realizado",
+  "userId": "uuid",
+  "email": "admin@easysmart.io",
+  "role": "super_admin"
+}
+Tentativa de acesso não autorizado:
+json{
+  "level": "warn",
+  "msg": "Unauthorized admin access attempt",
+  "userId": "uuid",
+  "userRole": "tenant_admin",
+  "tenantId": "uuid",
+  "path": "/api/v1/admin/tenants",
+  "method": "GET"
+}
+Impersonate (CRÍTICO):
+json{
+  "level": "warn",
+  "msg": "Impersonate realizado",
+  "adminUserId": "uuid",
+  "adminEmail": "admin@easysmart.io",
+  "targetTenantId": "uuid",
+  "targetTenantName": "Tech Solutions Ltda",
+  "targetUserId": "uuid",
+  "targetUserEmail": "admin@techsolutions.com",
+  "reason": "Suporte técnico - debug de sensores",
+  "timestamp": "2025-10-18T10:30:00Z"
+}
 
-**Tags:** device_uuid, entity_id, entity_type, unit, device_class
+🧪 Testes Automatizados
+Script: backend/test-admin-routes.sh
+Execute todos os testes:
+bashchmod +x ~/easysmart-platform/backend/test-admin-routes.sh
+~/easysmart-platform/backend/test-admin-routes.sh
+Testes Incluídos:
 
-**Fields:** value_float, value_bool, value_string
+✅ Obtenção de token super_admin
+✅ GET /admin/tenants
+✅ GET /admin/tenants/:id
+✅ GET /admin/devices (com filtros)
+✅ GET /admin/metrics
+✅ Bloqueio de acesso (tenant_admin)
+✅ POST /admin/tenants/:id/impersonate
 
----
+Output Esperado:
+==========================================
+🧪 Testes - Admin Routes (Sprint 2)
+==========================================
+
+✅ Token obtido (role: super_admin)
+✅ Tenants listados: 4 tenants
+✅ Detalhes do tenant obtidos
+✅ Devices listados: 25 devices
+✅ Métricas da plataforma obtidas
+✅ Acesso bloqueado corretamente
+✅ Impersonate realizado com sucesso
+
+==========================================
+✅ Testes Concluídos!
+==========================================
+
+💡 Casos de Uso Práticos
+1. Monitorar Crescimento da Plataforma
+bash# Ver métricas gerais
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:3010/api/v1/admin/metrics | jq '.platform'
+
+# Output: total_tenants, new_tenants_30d, total_devices, etc.
+2. Investigar Tenant com Problemas
+bash# Listar todos tenants
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:3010/api/v1/admin/tenants | jq '.tenants[] | {id, name, device_count}'
+
+# Ver detalhes do tenant problemático
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:3010/api/v1/admin/tenants/$TENANT_ID | jq '.'
+
+# Impersonate para debug
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"Debug: devices offline há 3 dias"}' \
+  http://localhost:3010/api/v1/admin/tenants/$TENANT_ID/impersonate
+3. Análise de Dispositivos Cross-Tenant
+bash# Ver todos devices online
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:3010/api/v1/admin/devices?status=online&limit=100" \
+  | jq '.devices[] | {name, tenant_name, last_seen}'
+
+# Devices offline de um tenant específico
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:3010/api/v1/admin/devices?tenant_id=$TENANT_ID&status=offline" \
+  | jq '.'
+4. Auditoria de Usuários
+bash# Ver distribuição de roles
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:3010/api/v1/admin/metrics | jq '.users'
+
+# Listar usuários de um tenant
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:3010/api/v1/admin/tenants/$TENANT_ID | jq '.users'
+
+⚠️ Boas Práticas
+✅ DO (Faça)
+
+✅ Use impersonate apenas para suporte técnico
+✅ Sempre forneça um motivo descritivo no impersonate
+✅ Revise logs de auditoria regularmente
+✅ Use filtros e paginação em listas grandes
+✅ Valide tokens antes de operações críticas
+
+❌ DON'T (Não Faça)
+
+❌ Compartilhe credenciais de super_admin
+❌ Use impersonate para operações rotineiras
+❌ Ignore avisos de acesso não autorizado nos logs
+❌ Faça requests sem paginação em produção
+❌ Armazene tokens em logs ou arquivos de texto
+
+
+🔗 Endpoints Relacionados
+Autenticação:
+
+POST /api/v1/auth/login - Obter tokens
+POST /api/v1/auth/refresh - Renovar access token
+GET /api/v1/auth/users/me - Verificar role atual
+
+Devices (Tenant):
+
+GET /api/v1/devices - Devices do tenant autenticado
+GET /api/v1/devices/:id - Detalhes do device
+
+Telemetria:
+
+GET /api/v1/telemetry/:deviceId/:entityId - Dados time-series
+
+
+📚 Documentação Adicional
+
+README.md - Documentação completa do projeto
+CHANGELOG.md - Histórico de mudanças
+API Reference - Todos endpoints
+
+
+Última atualização: 2025-10-18
+Versão da API: v1
+Status: Production Ready ✅
 
 ## 📡 MQTT Topics
 
@@ -1352,11 +1635,9 @@ Este README é a **fonte única de verdade** do projeto.
 **O projeto está sólido e pronto para crescer!** 🚀
 
 ---
-
-**Última atualização:** 2025-10-17  
-**Versão:** 0.2.1  
-**Status:** Phase 2.1.5 Ready to Start 🚧  
-**Próxima tarefa:** Implementar Role System (Migration + Middleware)
+**Última atualização:** 2025-10-18  
+**Versão:** 0.3.0  
+**Status:** Phase 2.1.5 Complete ✅ | Next: Phase 2.2 (Device Management UI)
 
 ---
 
