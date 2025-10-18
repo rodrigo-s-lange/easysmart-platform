@@ -1,95 +1,60 @@
-'use strict';
-
 const bcrypt = require('bcrypt');
-const { z } = require('zod');
-const { pool } = require('../config/database');
-const {
-  generateAccessToken,
-  generateRefreshToken,
-  hashToken,
-} = require('../utils/token');
+const pool = require('../config/database');
+const logger = require('../config/logger');
+const { generateAccessToken, generateRefreshToken } = require('../utils/token');
 
-// ==================== SCHEMAS DE VALIDAÇÃO ====================
+// POST /api/v1/auth/register
+const register = async (req, res) => {
+  const client = await pool.connect();
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  tenantName: z.string().min(2).optional(),
-});
-
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-});
-
-const refreshSchema = z.object({
-  refreshToken: z.string().startsWith('rt_'),
-});
-
-// ==================== HELPERS ====================
-
-async function findUserByEmail(email) {
-  const res = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-  return res.rows[0];
-}
-
-async function insertUser({ tenant_id, email, password_hash, role = 'user' }) {
-  const res = await pool.query(
-    `INSERT INTO users (tenant_id, email, password_hash, role)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, tenant_id, email, role, created_at`,
-    [tenant_id, email, password_hash, role]
-  );
-  return res.rows[0];
-}
-
-async function createTenant(name) {
-  const res = await pool.query(
-    'INSERT INTO tenants (name) VALUES ($1) RETURNING id, name',
-    [name]
-  );
-  return res.rows[0];
-}
-
-async function storeRefreshToken(userId, token) {
-  const tokenHash = hashToken(token);
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
-  await pool.query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-     VALUES ($1, $2, $3)`,
-    [userId, tokenHash, expiresAt]
-  );
-}
-
-async function deleteRefreshToken(token) {
-  const tokenHash = hashToken(token);
-  await pool.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [tokenHash]);
-}
-
-// ==================== CONTROLLERS ====================
-
-exports.register = async (req, res) => {
   try {
-    const { email, password, tenantName } = registerSchema.parse(req.body);
+    const { email, password, tenant_name } = req.body;
 
-    const existing = await findUserByEmail(email);
-    if (existing) {
-      return res.status(409).json({ message: 'Email already registered' });
+    // Validação básica
+    if (!email || !password || !tenant_name) {
+      return res.status(400).json({ error: 'Email, password e tenant_name são obrigatórios' });
     }
 
-    const saltRounds = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
-    const password_hash = await bcrypt.hash(password, saltRounds);
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Senha deve ter no mínimo 6 caracteres' });
+    }
 
-    // Cria tenant se não existir
-    const tenant = await createTenant(tenantName || email.split('@')[0]);
+    await client.query('BEGIN');
 
-    const user = await insertUser({
-      tenant_id: tenant.id,
-      email,
-      password_hash,
-      role: 'admin',
-    });
+    // Verificar se email já existe
+    const existingUser = await client.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
+    );
 
+    if (existingUser.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Email já cadastrado' });
+    }
+
+    // Criar tenant
+    const tenantResult = await client.query(
+      'INSERT INTO tenants (name) VALUES ($1) RETURNING id',
+      [tenant_name]
+    );
+    const tenantId = tenantResult.rows[0].id;
+
+    // Hash da senha
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Criar usuário (primeiro usuário do tenant é tenant_admin)
+    const userResult = await client.query(
+      `INSERT INTO users (tenant_id, email, password_hash, role) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING id, email, tenant_id, role, created_at`,
+      [tenantId, email, passwordHash, 'tenant_admin']
+    );
+
+    const user = userResult.rows[0];
+
+    await client.query('COMMIT');
+
+    // Gerar tokens (incluindo role)
     const accessToken = generateAccessToken({
       userId: user.id,
       tenantId: user.tenant_id,
@@ -97,110 +62,223 @@ exports.register = async (req, res) => {
     });
 
     const refreshToken = generateRefreshToken();
-    await storeRefreshToken(user.id, refreshToken);
 
-    return res.status(201).json({
-      user,
-      tokens: { accessToken, refreshToken },
-    });
-  } catch (err) {
-    console.error('register error', err);
-    return res.status(400).json({ message: err.message });
-  }
-};
+    // Salvar refresh token (CORRIGIDO: token_hash ao invés de token)
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+    await pool.query(
+      'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+      [user.id, refreshToken, expiresAt]
+    );
 
-exports.login = async (req, res) => {
-  try {
-    const { email, password } = loginSchema.parse(req.body);
-    const user = await findUserByEmail(email);
-
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
-
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.status(401).json({ message: 'Invalid credentials' });
-
-    const accessToken = generateAccessToken({
+    logger.info('Novo usuário registrado', {
       userId: user.id,
+      email: user.email,
       tenantId: user.tenant_id,
       role: user.role,
     });
 
-    const refreshToken = generateRefreshToken();
-    await storeRefreshToken(user.id, refreshToken);
-
-    return res.json({
+    res.status(201).json({
       user: {
         id: user.id,
-        tenant_id: user.tenant_id,
         email: user.email,
+        tenant_id: user.tenant_id,
         role: user.role,
       },
-      tokens: { accessToken, refreshToken },
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
     });
-  } catch (err) {
-    console.error('login error', err);
-    return res.status(400).json({ message: err.message });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    logger.error('Erro no registro', { error: error.message });
+    res.status(500).json({ error: 'Erro ao criar usuário' });
+  } finally {
+    client.release();
   }
 };
 
-exports.refresh = async (req, res) => {
+// POST /api/v1/auth/login
+const login = async (req, res) => {
   try {
-    const { refreshToken } = refreshSchema.parse(req.body);
-    const tokenHash = hashToken(refreshToken);
+    const { email, password } = req.body;
 
-    const resToken = await pool.query(
-      `SELECT * FROM refresh_tokens WHERE token_hash = $1 AND expires_at > NOW()`,
-      [tokenHash]
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    }
+
+    // Buscar usuário (incluindo role)
+    const result = await pool.query(
+      'SELECT id, email, password_hash, tenant_id, role FROM users WHERE email = $1',
+      [email]
     );
-    const record = resToken.rows[0];
 
-    if (!record) return res.status(403).json({ message: 'Invalid or expired refresh token' });
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
 
-    const userRes = await pool.query('SELECT id, tenant_id, role FROM users WHERE id = $1', [
-      record.user_id,
-    ]);
-    const user = userRes.rows[0];
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const user = result.rows[0];
 
+    // Verificar senha
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+
+    // Gerar tokens (incluindo role)
     const accessToken = generateAccessToken({
       userId: user.id,
       tenantId: user.tenant_id,
       role: user.role,
     });
 
-    return res.json({ accessToken });
-  } catch (err) {
-    console.error('refresh error', err);
-    return res.status(400).json({ message: err.message });
-  }
-};
+    const refreshToken = generateRefreshToken();
 
-exports.logout = async (req, res) => {
-  try {
-    const { refreshToken } = refreshSchema.parse(req.body);
-    await deleteRefreshToken(refreshToken);
-    return res.json({ message: 'Logged out successfully' });
-  } catch (err) {
-    console.error('logout error', err);
-    return res.status(400).json({ message: err.message });
-  }
-};
-
-exports.me = async (req, res) => {
-  try {
-    const { user } = req;
-    if (!user) return res.status(401).json({ message: 'Not authenticated' });
-
-    const dbRes = await pool.query(
-      'SELECT id, tenant_id, email, role, created_at FROM users WHERE id = $1',
-      [user.userId]
+    // Salvar refresh token (CORRIGIDO: token_hash ao invés de token)
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+      [user.id, refreshToken, expiresAt]
     );
-    const userData = dbRes.rows[0];
-    if (!userData) return res.status(404).json({ message: 'User not found' });
 
-    return res.json(userData);
-  } catch (err) {
-    console.error('me error', err);
-    return res.status(500).json({ message: 'Internal error' });
+    logger.info('Login realizado', {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        tenant_id: user.tenant_id,
+        role: user.role,
+      },
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    logger.error('Erro no login', { error: error.message });
+    res.status(500).json({ error: 'Erro ao fazer login' });
   }
+};
+
+// POST /api/v1/auth/refresh
+const refresh = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token é obrigatório' });
+    }
+
+    // Buscar refresh token (CORRIGIDO: token_hash ao invés de token)
+    const result = await pool.query(
+      `SELECT rt.user_id, rt.expires_at, u.tenant_id, u.role 
+       FROM refresh_tokens rt
+       JOIN users u ON u.id = rt.user_id
+       WHERE rt.token_hash = $1`,
+      [refreshToken]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Refresh token inválido' });
+    }
+
+    const { user_id, expires_at, tenant_id, role } = result.rows[0];
+
+    // Verificar se expirou
+    if (new Date(expires_at) < new Date()) {
+      await pool.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [refreshToken]);
+      return res.status(401).json({ error: 'Refresh token expirado' });
+    }
+
+    // Gerar novos tokens (incluindo role)
+    const newAccessToken = generateAccessToken({
+      userId: user_id,
+      tenantId: tenant_id,
+      role: role,
+    });
+
+    const newRefreshToken = generateRefreshToken();
+
+    // Deletar refresh token antigo e criar novo (CORRIGIDO: token_hash)
+    await pool.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [refreshToken]);
+
+    const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+      [user_id, newRefreshToken, newExpiresAt]
+    );
+
+    logger.info('Token renovado', { userId: user_id });
+
+    res.json({
+      tokens: {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+      },
+    });
+  } catch (error) {
+    logger.error('Erro ao renovar token', { error: error.message });
+    res.status(500).json({ error: 'Erro ao renovar token' });
+  }
+};
+
+// POST /api/v1/auth/logout
+const logout = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (refreshToken) {
+      // CORRIGIDO: token_hash ao invés de token
+      await pool.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [refreshToken]);
+    }
+
+    logger.info('Logout realizado', { userId: req.user?.userId });
+
+    res.json({ message: 'Logout realizado com sucesso' });
+  } catch (error) {
+    logger.error('Erro no logout', { error: error.message });
+    res.status(500).json({ error: 'Erro ao fazer logout' });
+  }
+};
+
+// GET /api/v1/auth/users/me
+const me = async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, tenant_id, role, created_at FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const user = result.rows[0];
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        tenant_id: user.tenant_id,
+        role: user.role,
+        created_at: user.created_at,
+      },
+    });
+  } catch (error) {
+    logger.error('Erro ao buscar usuário', { error: error.message });
+    res.status(500).json({ error: 'Erro ao buscar usuário' });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  refresh,
+  logout,
+  me,
 };

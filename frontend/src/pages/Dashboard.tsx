@@ -98,7 +98,7 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        <Card className="mt-8">
+        {/* <Card className="mt-8">
           <CardHeader>
             <CardTitle>Próximos Passos</CardTitle>
             <CardDescription>
@@ -144,7 +144,7 @@ export default function Dashboard() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
       </main>
     </div>
   )
