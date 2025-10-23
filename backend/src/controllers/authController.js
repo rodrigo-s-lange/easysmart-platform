@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const pool = require('../config/database');
 const logger = require('../config/logger');
 const { generateAccessToken, generateRefreshToken } = require('../utils/token');
+const { auditLogin, auditLogout } = require('../utils/auditLogger');
 
 // POST /api/v1/auth/register
 const register = async (req, res) => {
@@ -63,12 +64,15 @@ const register = async (req, res) => {
 
     const refreshToken = generateRefreshToken();
 
-    // Salvar refresh token (CORRIGIDO: token_hash ao invés de token)
+    // Salvar refresh token
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
     await pool.query(
       'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
       [user.id, refreshToken, expiresAt]
     );
+
+    // Audit log: registro bem-sucedido
+    await auditLogin(req, user, true);
 
     logger.info('Novo usuário registrado', {
       userId: user.id,
@@ -114,6 +118,8 @@ const login = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      // Audit log: login falhou (usuário não existe)
+      await auditLogin(req, { email }, false);
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
@@ -122,6 +128,8 @@ const login = async (req, res) => {
     // Verificar senha
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
+      // Audit log: login falhou (senha errada)
+      await auditLogin(req, user, false);
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
@@ -134,12 +142,15 @@ const login = async (req, res) => {
 
     const refreshToken = generateRefreshToken();
 
-    // Salvar refresh token (CORRIGIDO: token_hash ao invés de token)
+    // Salvar refresh token
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     await pool.query(
       'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
       [user.id, refreshToken, expiresAt]
     );
+
+    // Audit log: login bem-sucedido
+    await auditLogin(req, user, true);
 
     logger.info('Login realizado', {
       userId: user.id,
@@ -174,7 +185,7 @@ const refresh = async (req, res) => {
       return res.status(400).json({ error: 'Refresh token é obrigatório' });
     }
 
-    // Buscar refresh token (CORRIGIDO: token_hash ao invés de token)
+    // Buscar refresh token
     const result = await pool.query(
       `SELECT rt.user_id, rt.expires_at, u.tenant_id, u.role 
        FROM refresh_tokens rt
@@ -204,7 +215,7 @@ const refresh = async (req, res) => {
 
     const newRefreshToken = generateRefreshToken();
 
-    // Deletar refresh token antigo e criar novo (CORRIGIDO: token_hash)
+    // Deletar refresh token antigo e criar novo
     await pool.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [refreshToken]);
 
     const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -233,9 +244,11 @@ const logout = async (req, res) => {
     const { refreshToken } = req.body;
 
     if (refreshToken) {
-      // CORRIGIDO: token_hash ao invés de token
       await pool.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [refreshToken]);
     }
+
+    // Audit log: logout
+    await auditLogout(req);
 
     logger.info('Logout realizado', { userId: req.user?.userId });
 

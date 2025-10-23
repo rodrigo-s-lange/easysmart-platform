@@ -1,149 +1,76 @@
+'use strict';
+
 const { InfluxDB, Point } = require('@influxdata/influxdb-client');
 const logger = require('../config/logger');
 
+/**
+ * Implementação compatível com mqttService:
+ * - createPoint(data)
+ * - enqueue(point)              -> escreve imediatamente (sem fila)
+ * - startWriter() / stopWriter  -> no-ops (logam modo imediato)
+ * - getLatest(deviceId, entityId)
+ * - getSeries(params)
+ * - getMetrics()
+ * - cacheDevice(mqttId, uuid)   -> cache em memória
+ * - getDeviceFromCache(mqttId)
+ * - close()
+ */
 class InfluxService {
   constructor() {
-    this.client = new InfluxDB({
-      url: process.env.INFLUXDB_URL,
-      token: process.env.INFLUXDB_TOKEN,
-    });
+    const url = process.env.INFLUXDB_URL;
+    const token = process.env.INFLUXDB_TOKEN;
+    if (!url || !token) {
+      throw new Error('INFLUXDB_URL/INFLUXDB_TOKEN ausentes no ambiente');
+    }
 
+    this.client = new InfluxDB({ url, token });
     this.org = process.env.INFLUXDB_ORG;
     this.bucket = process.env.INFLUXDB_BUCKET;
-    
+
+    // Precisão em ms para combinar com o resto do backend
     this.writeApi = this.client.getWriteApi(this.org, this.bucket, 'ms');
     this.queryApi = this.client.getQueryApi(this.org);
 
-    // Buffer para batch writing
-    this.queue = [];
-    this.maxQueueSize = 50000; // Limite de segurança
-    this.batchSize = 500; // Pontos por flush
-    this.flushInterval = 500; // ms
-    this.writerTimer = null;
-    this.isWriting = false;
-
-    // Cache device_uuid por mqtt_id (evita queries PostgreSQL)
+    // Cache mqttId -> deviceUuid
     this.deviceCache = new Map();
 
-    // Métricas
+    // Métricas simples
     this.metrics = {
+      mode: 'immediate',       // sem fila
       pointsWritten: 0,
       pointsDropped: 0,
       writeErrors: 0,
       lastWriteTime: null,
       lastWriteStatus: 'idle',
+      queueSize: 0,
+      cacheSize: 0,
     };
   }
 
-  /**
-   * Inicia o writer (flush automático)
-   */
+  /** Modo imediato: apenas loga para compatibilidade */
   startWriter() {
-    if (this.writerTimer) {
-      logger.warn('Writer já está ativo');
-      return;
-    }
-
-    this.writerTimer = setInterval(() => {
-      this.flush();
-    }, this.flushInterval);
-
-    logger.info('📊 Influx Writer iniciado', {
-      batchSize: this.batchSize,
-      flushInterval: `${this.flushInterval}ms`,
-    });
+    logger.info('💾 Iniciando Influx Writer (modo automático)');
+    logger.info('💾 InfluxService usando modo de escrita imediata (auto-flush).');
   }
-
-  /**
-   * Para o writer
-   */
   stopWriter() {
-    if (this.writerTimer) {
-      clearInterval(this.writerTimer);
-      this.writerTimer = null;
-      logger.info('Writer parado');
-    }
+    // no-op
   }
 
-  /**
-   * Adiciona ponto à fila
-   */
+  /** Compat: "enqueue" escreve imediatamente */
   enqueue(point) {
-    if (this.queue.length >= this.maxQueueSize) {
-      // Descarta o ponto mais antigo (política drop oldest)
-      this.queue.shift();
-      this.metrics.pointsDropped++;
-      
-      if (this.metrics.pointsDropped % 1000 === 0) {
-        logger.warn('⚠️  Fila saturada, descartando pontos', {
-          dropped: this.metrics.pointsDropped,
-          queueSize: this.queue.length,
-        });
-      }
-    }
-
-    this.queue.push(point);
-
-    // Flush imediato se batch completo
-    if (this.queue.length >= this.batchSize) {
-      this.flush();
-    }
-  }
-
-  /**
-   * Flush da fila para InfluxDB
-   */
-  async flush() {
-    if (this.isWriting || this.queue.length === 0) {
-      return;
-    }
-
-    this.isWriting = true;
-    const batch = this.queue.splice(0, this.batchSize);
-
     try {
-      // Escreve batch
-      for (const point of batch) {
-        this.writeApi.writePoint(point);
-      }
-
-      await this.writeApi.flush();
-
-      this.metrics.pointsWritten += batch.length;
+      this.writeApi.writePoint(point);
+      this.metrics.pointsWritten += 1;
       this.metrics.lastWriteTime = new Date();
       this.metrics.lastWriteStatus = 'ok';
-
-      logger.debug(`💾 Batch escrito: ${batch.length} pontos`, {
-        queueRemaining: this.queue.length,
-        totalWritten: this.metrics.pointsWritten,
-      });
-
     } catch (err) {
-      this.metrics.writeErrors++;
+      this.metrics.writeErrors += 1;
       this.metrics.lastWriteStatus = 'error';
-
-      logger.error({ err }, '❌ Erro ao escrever batch no InfluxDB');
-
-      // Retry: recoloca pontos na fila (início)
-      this.queue.unshift(...batch);
-
-      // Limita retry para evitar loop infinito
-      if (this.metrics.writeErrors > 10) {
-        logger.fatal('💥 Muitos erros de escrita, descartando batch');
-        this.metrics.pointsDropped += batch.length;
-        this.queue.splice(0, batch.length); // Remove do retry
-      }
-
-    } finally {
-      this.isWriting = false;
+      logger.error({ err }, 'Erro ao escrever ponto no InfluxDB');
     }
   }
 
-  /**
-   * Cria Point do InfluxDB
-   * @param {Object} data
-   * @returns {Point}
-   */
+  /** Cria Point padronizado */
   createPoint(data) {
     const {
       deviceUuid,
@@ -153,7 +80,7 @@ class InfluxService {
       deviceClass,
       unit,
       value,
-      valueType, // 'float' | 'bool' | 'string'
+      valueType,        // 'float' | 'bool' | 'string'
       tenantId = null,
       timestamp = null,
     } = data;
@@ -164,103 +91,56 @@ class InfluxService {
       .tag('entity_id', entityId)
       .tag('entity_type', entityType);
 
-    // Tags opcionais
-    if (tenantId) point.tag('tenant_id', tenantId);
+    if (tenantId)    point.tag('tenant_id', tenantId);
     if (deviceClass) point.tag('device_class', deviceClass);
-    if (unit) point.tag('unit', unit);
+    if (unit)        point.tag('unit', unit);
 
-    // Field baseado no tipo (evita type conflict)
-    if (valueType === 'float') {
-      point.floatField('value_float', value);
-    } else if (valueType === 'bool') {
-      point.booleanField('value_bool', value);
-    } else {
-      point.stringField('value_string', String(value));
-    }
+    if (valueType === 'float')       point.floatField('value_float', value);
+    else if (valueType === 'bool')   point.booleanField('value_bool', value);
+    else                             point.stringField('value_string', String(value));
 
-    // Timestamp
-    if (timestamp) {
-      point.timestamp(new Date(timestamp));
-    }
+    if (timestamp)   point.timestamp(new Date(timestamp));
 
     return point;
   }
 
-  /**
-   * Normaliza payload MQTT para Point
-   * @param {Object} params
-   * @returns {Object} { value, valueType, unit }
-   */
+  /** Normaliza payload MQTT (string, number, JSON com value/unit, ON/OFF etc.) */
   normalizePayload(payload, entityType) {
     let value, valueType, unit;
 
-    // Payload é string (ex: "ON", "OFF", "23.5")
     if (typeof payload === 'string') {
-      const trimmed = payload.trim();
-
-      // Boolean (switch/binary_sensor)
-      if (trimmed === 'ON' || trimmed === 'OFF') {
-        value = trimmed === 'ON';
+      const t = payload.trim();
+      if (t === 'ON' || t === 'OFF') {
+        value = (t === 'ON');
         valueType = 'bool';
-      }
-      // Tentar parse numérico
-      else if (!isNaN(trimmed) && trimmed !== '') {
-        value = parseFloat(trimmed);
+      } else if (!isNaN(t) && t !== '') {
+        value = parseFloat(t);
         valueType = 'float';
-      }
-      // String genérica
-      else {
-        value = trimmed;
+      } else {
+        value = t;
         valueType = 'string';
       }
-    }
-    // Payload é objeto JSON
-    else if (typeof payload === 'object' && payload !== null) {
-      // { "value": 23.5, "unit": "°C" }
+    } else if (typeof payload === 'number') {
+      value = payload;
+      valueType = 'float';
+    } else if (typeof payload === 'boolean') {
+      value = payload;
+      valueType = 'bool';
+    } else if (payload && typeof payload === 'object') {
       if ('value' in payload) {
-        const rawValue = payload.value;
-
-        if (typeof rawValue === 'number') {
-          value = rawValue;
-          valueType = 'float';
-          unit = payload.unit || null;
-        } else if (typeof rawValue === 'boolean') {
-          value = rawValue;
-          valueType = 'bool';
-        } else {
-          value = String(rawValue);
-          valueType = 'string';
-        }
-      }
-      // { "state": "ON" }
-      else if ('state' in payload) {
-        const state = String(payload.state).trim();
-        if (state === 'ON' || state === 'OFF') {
-          value = state === 'ON';
-          valueType = 'bool';
-        } else {
-          value = state;
-          valueType = 'string';
-        }
-      }
-      // Objeto desconhecido
-      else {
+        const raw = payload.value;
+        if (typeof raw === 'number') { value = raw; valueType = 'float'; unit = payload.unit || null; }
+        else if (typeof raw === 'boolean') { value = raw; valueType = 'bool'; }
+        else { value = String(raw); valueType = 'string'; }
+      } else if ('state' in payload) {
+        const s = String(payload.state).trim();
+        if (s === 'ON' || s === 'OFF') { value = (s === 'ON'); valueType = 'bool'; }
+        else { value = s; valueType = 'string'; }
+      } else {
         value = JSON.stringify(payload);
         valueType = 'string';
       }
-    }
-    // Número direto
-    else if (typeof payload === 'number') {
-      value = payload;
-      valueType = 'float';
-    }
-    // Boolean direto
-    else if (typeof payload === 'boolean') {
-      value = payload;
-      valueType = 'bool';
-    }
-    // Fallback
-    else {
+    } else {
       value = String(payload);
       valueType = 'string';
     }
@@ -268,59 +148,45 @@ class InfluxService {
     return { value, valueType, unit };
   }
 
-  /**
-   * Query: Último valor de uma entidade
-   * @param {string} deviceUuid
-   * @param {string} entityId
-   * @returns {Promise<Object>}
-   */
-  async getLatest(deviceUuid, entityId) {
-    const query = `
-      from(bucket: "${this.bucket}")
+  /** Último valor de uma entidade (qualquer field) */
+  async getLatest(deviceId, entityId) {
+    // deviceId pode ser o UUID real OU o mqtt_id; consultamos ambas as tags
+    const flux = `
+      data = from(bucket: "${this.bucket}")
         |> range(start: -7d)
         |> filter(fn: (r) => r._measurement == "telemetry")
-        |> filter(fn: (r) => r.device_uuid == "${deviceUuid}")
         |> filter(fn: (r) => r.entity_id == "${entityId}")
-        |> last()
+        |> filter(fn: (r) => r.device_uuid == "${deviceId}" or r.mqtt_id == "${deviceId}")
+
+      // combina os três fields possíveis e pega o último
+      union(tables: [
+        data |> filter(fn:(r)=> r._field == "value_float"),
+        data |> filter(fn:(r)=> r._field == "value_bool"),
+        data |> filter(fn:(r)=> r._field == "value_string"),
+      ])
+      |> last()
     `;
 
-    try {
-      const rows = [];
-      await this.queryApi.collectRows(query).then(data => {
-        data.forEach(row => rows.push(row));
-      });
+    const rows = await this.queryApi.collectRows(flux);
+    if (!rows || rows.length === 0) return null;
 
-      if (rows.length === 0) {
-        return null;
-      }
-
-      // Retorna último ponto
-      const row = rows[0];
-      
-      return {
-        deviceUuid: row.device_uuid,
-        entityId: row.entity_id,
-        entityType: row.entity_type,
-        value: row._value,
-        field: row._field,
-        unit: row.unit || null,
-        timestamp: row._time,
-      };
-
-    } catch (err) {
-      logger.error({ err, deviceUuid, entityId }, 'Erro ao query latest');
-      throw err;
-    }
+    const r = rows[0];
+    return {
+      deviceUuid: r.device_uuid || null,
+      mqttId:     r.mqtt_id     || null,
+      entityId:   r.entity_id,
+      entityType: r.entity_type || null,
+      value:      r._value,
+      field:      r._field,
+      unit:       r.unit || null,
+      timestamp:  r._time,
+    };
   }
 
-  /**
-   * Query: Série temporal com agregação
-   * @param {Object} params
-   * @returns {Promise<Array>}
-   */
+  /** Série temporal agregada */
   async getSeries(params) {
     const {
-      deviceUuid,
+      deviceUuid,     // pode ser UUID ou mqtt_id
       entityId,
       start = '-6h',
       stop = 'now()',
@@ -328,74 +194,55 @@ class InfluxService {
       aggregation = 'mean',
     } = params;
 
-    const query = `
-      from(bucket: "${this.bucket}")
+    const flux = `
+      data = from(bucket: "${this.bucket}")
         |> range(start: ${start}, stop: ${stop})
         |> filter(fn: (r) => r._measurement == "telemetry")
-        |> filter(fn: (r) => r.device_uuid == "${deviceUuid}")
         |> filter(fn: (r) => r.entity_id == "${entityId}")
-        |> aggregateWindow(every: ${window}, fn: ${aggregation}, createEmpty: false)
-        |> yield(name: "result")
+        |> filter(fn: (r) => r.device_uuid == "${deviceUuid}" or r.mqtt_id == "${deviceUuid}")
+
+      union(tables: [
+        data |> filter(fn:(r)=> r._field == "value_float"),
+        data |> filter(fn:(r)=> r._field == "value_bool"),
+        data |> filter(fn:(r)=> r._field == "value_string"),
+      ])
+      |> aggregateWindow(every: ${window}, fn: ${aggregation}, createEmpty: false)
+      |> yield(name: "result")
     `;
 
-    try {
-      const rows = [];
-      await this.queryApi.collectRows(query).then(data => {
-        data.forEach(row => rows.push(row));
-      });
-
-      return rows.map(row => ({
-        timestamp: row._time,
-        value: row._value,
-        field: row._field,
-      }));
-
-    } catch (err) {
-      logger.error({ err, params }, 'Erro ao query series');
-      throw err;
-    }
+    const rows = await this.queryApi.collectRows(flux);
+    return rows.map(r => ({
+      timestamp: r._time,
+      value: r._value,
+      field: r._field,
+    }));
   }
 
-  /**
-   * Retorna métricas do writer
-   */
   getMetrics() {
     return {
       ...this.metrics,
-      queueSize: this.queue.length,
       cacheSize: this.deviceCache.size,
+      queueSize: 0, // modo imediato
+      mode: 'immediate',
     };
   }
 
-  /**
-   * Cache de device_uuid por mqtt_id
-   */
   cacheDevice(mqttId, deviceUuid) {
     this.deviceCache.set(mqttId, deviceUuid);
+    this.metrics.cacheSize = this.deviceCache.size;
   }
-
   getDeviceFromCache(mqttId) {
     return this.deviceCache.get(mqttId);
   }
 
-  /**
-   * Fecha conexão (graceful shutdown)
-   */
   async close() {
-    this.stopWriter();
-    
-    // Flush final
-    if (this.queue.length > 0) {
-      logger.info(`💾 Flush final: ${this.queue.length} pontos`);
-      await this.flush();
-    }
-
+    try {
+      await this.writeApi.flush();
+    } catch (e) {}
     await this.writeApi.close();
-    logger.info('InfluxDB writer fechado');
+    logger.info('InfluxService fechado (writeApi.close).');
   }
 }
 
-// Singleton
 const influxService = new InfluxService();
-
 module.exports = influxService;

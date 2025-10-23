@@ -1,26 +1,16 @@
-'use strict';
-
 const express = require('express');
 const router = express.Router();
-
 const authController = require('../controllers/authController');
-const { requireAuth } = require('../middleware/auth');
+const { authenticate } = require('../middleware/authenticate');
+const { loginLimiter, registerLimiter } = require('../middleware/rateLimit');
 
-// ==================== ROUTES ====================
-
-// Registro de novo usuário + tenant
-router.post('/register', authController.register);
-
-// Login (gera access + refresh tokens)
-router.post('/login', authController.login);
-
-// Atualização de token de acesso via refresh token
+// Public routes com rate limiting
+router.post('/register', registerLimiter, authController.register);
+router.post('/login', loginLimiter, authController.login);
 router.post('/refresh', authController.refresh);
 
-// Logout (revoga refresh token)
-router.post('/logout', authController.logout);
-
-// Retorna informações do usuário autenticado
-router.get('/users/me', requireAuth, authController.me);
+// Protected routes
+router.post('/logout', authenticate, authController.logout);
+router.get('/users/me', authenticate, authController.me);
 
 module.exports = router;

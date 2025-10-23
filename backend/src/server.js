@@ -110,8 +110,13 @@ async function startServer() {
     logger.info('📡 Conectando ao MQTT...');
     await connectMQTT();
 
-    logger.info('💾 Iniciando Influx Writer...');
-    influxService.startWriter();
+    logger.info('💾 Iniciando Influx Writer (modo automático)');
+if (typeof influxService.startWriter === 'function') {
+  influxService.startWriter();
+} else {
+  logger.info('💾 InfluxService usando modo de escrita imediata (auto-flush).');
+}
+
 
     const server = app.listen(PORT, () => {
       logger.info({
