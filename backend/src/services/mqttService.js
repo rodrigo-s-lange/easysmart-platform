@@ -114,9 +114,9 @@ async function handleDiscovery(deviceId, payload) {
 
     // Verifica se device já existe
     const deviceResult = await pool.query(
-      'SELECT id, device_token FROM devices WHERE metadata->>\'mqtt_id\' = $1',
-      [deviceId]
-    );
+  'SELECT id, device_token FROM devices WHERE metadata->>\'id\' = $1',
+  [deviceId]
+);
 
     let deviceUuid;
     let deviceToken;
@@ -197,9 +197,9 @@ async function handleTelemetry(data) {
     if (!deviceUuid) {
       // Consulta PostgreSQL
       const result = await pool.query(
-        'SELECT id, tenant_id FROM devices WHERE metadata->>\'mqtt_id\' = $1',
-        [mqttId]
-      );
+  'SELECT id, tenant_id FROM devices WHERE metadata->>\'id\' = $1',
+  [mqttId]
+);
 
       if (result.rows.length === 0) {
         logger.warn({ mqttId, topic }, '⚠️  Device não encontrado no banco');
@@ -237,16 +237,16 @@ async function handleTelemetry(data) {
 
     // 5. Cria Point
     const point = influxService.createPoint({
-      deviceUuid,
-      mqttId,
-      entityId,
-      entityType,
-      deviceClass,
-      unit,
-      value,
-      valueType,
-      timestamp: null, // Usa timestamp do servidor
-    });
+  deviceUuid: String(deviceUuid),   // 🔧 garante que seja string UUID
+  mqttId,                           // mqtt_id = "esp32s3-lab"
+  entityId,
+  entityType,
+  deviceClass,
+  unit,
+  value,
+  valueType,
+  timestamp: null,
+});
 
     // 6. Enfileira para escrita
     influxService.enqueue(point);
