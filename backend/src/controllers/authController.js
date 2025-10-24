@@ -5,9 +5,8 @@ const { generateAccessToken, generateRefreshToken } = require('../utils/token');
 const { auditLogin, auditLogout } = require('../utils/auditLogger');
 
 // POST /api/v1/auth/register
+// POST /api/v1/auth/register
 const register = async (req, res) => {
-  const client = await pool.connect();
-
   try {
     const { email, password, tenant_name } = req.body;
 
@@ -20,85 +19,87 @@ const register = async (req, res) => {
       return res.status(400).json({ error: 'Senha deve ter no mínimo 6 caracteres' });
     }
 
-    await client.query('BEGIN');
+    await pool.query('BEGIN');
 
-    // Verificar se email já existe
-    const existingUser = await client.query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
-    );
+    try {
+      // Verificar se email já existe
+      const existingUser = await pool.query(
+        'SELECT id FROM users WHERE email = $1',
+        [email]
+      );
 
-    if (existingUser.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Email já cadastrado' });
-    }
+      if (existingUser.rows.length > 0) {
+        await pool.query('ROLLBACK');
+        return res.status(409).json({ error: 'Email já cadastrado' });
+      }
 
-    // Criar tenant
-    const tenantResult = await client.query(
-      'INSERT INTO tenants (name) VALUES ($1) RETURNING id',
-      [tenant_name]
-    );
-    const tenantId = tenantResult.rows[0].id;
+      // Criar tenant
+      const tenantResult = await pool.query(
+        'INSERT INTO tenants (name) VALUES ($1) RETURNING id',
+        [tenant_name]
+      );
+      const tenantId = tenantResult.rows[0].id;
 
-    // Hash da senha
-    const passwordHash = await bcrypt.hash(password, 10);
+      // Hash da senha
+      const passwordHash = await bcrypt.hash(password, 10);
 
-    // Criar usuário (primeiro usuário do tenant é tenant_admin)
-    const userResult = await client.query(
-      `INSERT INTO users (tenant_id, email, password_hash, role) 
-       VALUES ($1, $2, $3, $4) 
-       RETURNING id, email, tenant_id, role, created_at`,
-      [tenantId, email, passwordHash, 'tenant_admin']
-    );
+      // Criar usuário (primeiro usuário do tenant é tenant_admin)
+      const userResult = await pool.query(
+        `INSERT INTO users (tenant_id, email, password_hash, role) 
+         VALUES ($1, $2, $3, $4) 
+         RETURNING id, email, tenant_id, role, created_at`,
+        [tenantId, email, passwordHash, 'tenant_admin']
+      );
 
-    const user = userResult.rows[0];
+      const user = userResult.rows[0];
 
-    await client.query('COMMIT');
+      await pool.query('COMMIT');
 
-    // Gerar tokens (incluindo role)
-    const accessToken = generateAccessToken({
-      userId: user.id,
-      tenantId: user.tenant_id,
-      role: user.role,
-    });
-
-    const refreshToken = generateRefreshToken();
-
-    // Salvar refresh token
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
-    await pool.query(
-      'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
-      [user.id, refreshToken, expiresAt]
-    );
-
-    // Audit log: registro bem-sucedido
-    await auditLogin(req, user, true);
-
-    logger.info('Novo usuário registrado', {
-      userId: user.id,
-      email: user.email,
-      tenantId: user.tenant_id,
-      role: user.role,
-    });
-
-    res.status(201).json({
-      user: {
-        id: user.id,
-        email: user.email,
-        tenant_id: user.tenant_id,
+      // Gerar tokens (incluindo role)
+      const accessToken = generateAccessToken({
+        userId: user.id,
+        tenantId: user.tenant_id,
         role: user.role,
-      },
-      tokens: {
-        accessToken,
-        refreshToken,
-      },
-    });
+      });
+
+      const refreshToken = generateRefreshToken();
+
+      // Salvar refresh token
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
+      await pool.query(
+        'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+        [user.id, refreshToken, expiresAt]
+      );
+
+      // Audit log: registro bem-sucedido
+      await auditLogin(req, user, true);
+
+      logger.info('Novo usuário registrado', {
+        userId: user.id,
+        email: user.email,
+        tenantId: user.tenant_id,
+        role: user.role,
+      });
+
+      res.status(201).json({
+        user: {
+          id: user.id,
+          email: user.email,
+          tenant_id: user.tenant_id,
+          role: user.role,
+        },
+        tokens: {
+          accessToken,
+          refreshToken,
+        },
+      });
+    } catch (error) {
+      await pool.query('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
-    await client.query('ROLLBACK');
     logger.error('Erro no registro', { error: error.message });
     res.status(500).json({ error: 'Erro ao criar usuário' });
-  } finally {
-    client.release();
   }
 };
 

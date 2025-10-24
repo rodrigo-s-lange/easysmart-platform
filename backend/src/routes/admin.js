@@ -1,47 +1,29 @@
-/**
- * Admin Routes
- * 
- * Rotas administrativas protegidas (apenas super_admin)
- * 
- * Base path: /api/v1/admin
- * 
- * Phase: 2.1.5 - Sprint 2
- * Date: 2025-10-18
- */
-
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const { requireAuth } = require('../middleware/auth');
-const requireSuperAdmin = require('../middleware/requireSuperAdmin');
+const { authenticate } = require('../middleware/authenticate');
+const { requireSuperAdmin } = require('../middleware/requireSuperAdmin');
+const { adminLimiter } = require('../middleware/rateLimit');
 
-// ==================== MIDDLEWARE ====================
-
-// Todas as rotas admin requerem autenticação + super_admin
-router.use(requireAuth);
+// Aplicar autenticação e super_admin em todas rotas
+router.use(authenticate);
 router.use(requireSuperAdmin);
+router.use(adminLimiter);
 
-// ==================== TENANTS ====================
+// Tenants
+router.get('/tenants', adminController.listTenants);
+router.get('/tenants/:id', adminController.getTenantDetails);
 
-// GET /api/v1/admin/tenants - Listar todos tenants
-router.get('/tenants', adminController.getTenants);
+// Devices (cross-tenant)
+router.get('/devices', adminController.listAllDevices);
 
-// GET /api/v1/admin/tenants/:id - Detalhes de um tenant
-router.get('/tenants/:id', adminController.getTenantById);
+// Metrics
+router.get('/metrics', adminController.getMetrics);
 
-// POST /api/v1/admin/tenants/:id/impersonate - Gerar token como tenant
-router.post('/tenants/:id/impersonate', adminController.impersonateTenant);
+// Impersonate
+router.post('/tenants/:id/impersonate', adminController.impersonate);
 
-// ==================== DEVICES ====================
-
-// GET /api/v1/admin/devices - Listar todos devices (cross-tenant)
-router.get('/devices', adminController.getAllDevices);
-
-// ==================== METRICS ====================
-
-// GET /api/v1/admin/metrics - Métricas da plataforma
-router.get('/metrics', adminController.getPlatformMetrics);
-
-// ==================== EXPORTS ====================
+// Audit Logs (compliance)
+router.get('/audit-logs', adminController.listAuditLogs);
 
 module.exports = router;

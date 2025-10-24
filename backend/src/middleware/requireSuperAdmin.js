@@ -1,63 +1,44 @@
 /**
- * Middleware: requireSuperAdmin
+ * Require Super Admin Middleware
  * 
- * Validates that the authenticated user has super_admin role.
- * Must be used AFTER requireAuth middleware.
- * 
- * Usage:
- * router.use(requireAuth);
- * router.use(requireSuperAdmin);
- * router.get('/admin/tenants', getTenants);
- * 
- * Phase: 2.1.5
+ * Verifica se usuário tem role super_admin.
+ * Registra tentativas de acesso negado no audit log.
  */
 
 const logger = require('../config/logger');
+const { auditAccessDenied } = require('../utils/auditLogger');
 
-const requireSuperAdmin = (req, res, next) => {
+async function requireSuperAdmin(req, res, next) {
   try {
-    // Check if user is authenticated (should be set by requireAuth)
     if (!req.user) {
-      logger.warn('requireSuperAdmin called without authentication');
-      return res.status(401).json({ 
-        error: 'Authentication required' 
+      await auditAccessDenied(req, 'No user in request (authentication failed)');
+      
+      return res.status(401).json({
+        error: 'Autenticação necessária',
       });
     }
 
-    // Check if user has super_admin role
     if (req.user.role !== 'super_admin') {
-      logger.warn('Unauthorized admin access attempt', {
+      await auditAccessDenied(req, 'Requires super_admin role');
+      
+      logger.warn({
         userId: req.user.userId,
-        userRole: req.user.role,
-        tenantId: req.user.tenantId,
+        role: req.user.role,
         path: req.path,
         method: req.method,
-      });
+      }, 'Acesso negado: super_admin requerido');
 
-      return res.status(403).json({ 
-        error: 'Access denied. Super admin privileges required.',
-        requiredRole: 'super_admin',
-        currentRole: req.user.role,
+      return res.status(403).json({
+        error: 'Acesso negado',
+        message: 'Apenas super_admin pode acessar este recurso',
       });
     }
-
-    // User is super_admin, allow access
-    logger.debug('Super admin access granted', {
-      userId: req.user.userId,
-      path: req.path,
-    });
 
     next();
   } catch (error) {
-    logger.error('Error in requireSuperAdmin middleware', {
-      error: error.message,
-      stack: error.stack,
-    });
-
-    res.status(500).json({ 
-      error: 'Internal server error' 
-    });
+    logger.error({ error }, 'Erro no middleware requireSuperAdmin');
+    return res.status(500).json({ error: 'Erro interno do servidor' });
   }
-};
+}
 
-module.exports = requireSuperAdmin;
+module.exports = { requireSuperAdmin };

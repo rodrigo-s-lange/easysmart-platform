@@ -1,70 +1,61 @@
-/**
- * Admin Controller
- * 
- * Rotas administrativas para super_admin gerenciar a plataforma.
- * Todas as rotas requerem role = 'super_admin'
- * 
- * Phase: 2.1.5 - Sprint 2
- * Date: 2025-10-18
- */
-
-const pool = require('../config/database');
+const { pool } = require('../config/database');
 const logger = require('../config/logger');
 const { generateAccessToken, generateRefreshToken } = require('../utils/token');
-
-// ==================== TENANTS ====================
+const { auditImpersonate, getAuditLogs, getAuditStats } = require('../utils/auditLogger');
 
 /**
  * GET /api/v1/admin/tenants
- * Lista todos os tenants da plataforma com métricas
+ * Lista todos os tenants com estatísticas
  */
-const getTenants = async (req, res) => {
+const listTenants = async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT 
+    const { limit = 50, offset = 0 } = req.query;
+
+    const result = await pool.query(
+      `SELECT 
         t.id,
         t.name,
         t.created_at,
         COUNT(DISTINCT u.id) as user_count,
         COUNT(DISTINCT d.id) as device_count,
-        COALESCE(
-          CASE 
-            WHEN COUNT(DISTINCT d.id) > 0 THEN 'active'
-            ELSE 'inactive'
-          END,
-          'inactive'
-        ) as status
+        CASE 
+          WHEN COUNT(DISTINCT d.id) > 0 THEN 'active'
+          ELSE 'inactive'
+        END as status
       FROM tenants t
       LEFT JOIN users u ON u.tenant_id = t.id
       LEFT JOIN devices d ON d.tenant_id = t.id
       GROUP BY t.id, t.name, t.created_at
       ORDER BY t.created_at DESC
-    `);
+      LIMIT $1 OFFSET $2`,
+      [parseInt(limit), parseInt(offset)]
+    );
 
-    logger.info('Tenants listados', {
-      adminUserId: req.user.userId,
-      tenantCount: result.rows.length,
-    });
+    const countResult = await pool.query('SELECT COUNT(*) as total FROM tenants');
+    const total = parseInt(countResult.rows[0].total);
 
     res.json({
       tenants: result.rows,
-      total: result.rows.length,
+      total,
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      },
     });
   } catch (error) {
-    logger.error('Erro ao listar tenants', { error: error.message });
+    logger.error({ error }, 'Erro ao listar tenants');
     res.status(500).json({ error: 'Erro ao listar tenants' });
   }
 };
 
 /**
  * GET /api/v1/admin/tenants/:id
- * Detalhes completos de um tenant específico
+ * Detalhes de um tenant específico
  */
-const getTenantById = async (req, res) => {
+const getTenantDetails = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Buscar tenant
     const tenantResult = await pool.query(
       'SELECT id, name, created_at FROM tenants WHERE id = $1',
       [id]
@@ -74,184 +65,42 @@ const getTenantById = async (req, res) => {
       return res.status(404).json({ error: 'Tenant não encontrado' });
     }
 
+    const usersResult = await pool.query(
+      'SELECT id, email, role, created_at FROM users WHERE tenant_id = $1',
+      [id]
+    );
+
+    const devicesResult = await pool.query(
+      'SELECT id, name, status, last_seen FROM devices WHERE tenant_id = $1',
+      [id]
+    );
+
     const tenant = tenantResult.rows[0];
 
-    // Buscar usuários do tenant
-    const usersResult = await pool.query(
-      `SELECT id, email, role, created_at 
-       FROM users 
-       WHERE tenant_id = $1 
-       ORDER BY created_at DESC`,
-      [id]
-    );
-
-    // Buscar devices do tenant
-    const devicesResult = await pool.query(
-      `SELECT 
-        d.id, 
-        d.name, 
-        d.status, 
-        d.last_seen, 
-        d.created_at,
-        COUNT(e.id) as entity_count
-       FROM devices d
-       LEFT JOIN entities e ON e.device_id = d.id
-       WHERE d.tenant_id = $1
-       GROUP BY d.id, d.name, d.status, d.last_seen, d.created_at
-       ORDER BY d.created_at DESC`,
-      [id]
-    );
-
-    // Buscar métricas recentes (última semana)
-    // Nota: Isso é uma simulação. Em produção, buscar do InfluxDB
-    const metricsResult = await pool.query(
-      `SELECT 
-        COUNT(DISTINCT d.id) as total_devices,
-        COUNT(DISTINCT CASE WHEN d.status = 'online' THEN d.id END) as online_devices,
-        COUNT(DISTINCT e.id) as total_entities
-       FROM devices d
-       LEFT JOIN entities e ON e.device_id = d.id
-       WHERE d.tenant_id = $1`,
-      [id]
-    );
-
-    logger.info('Detalhes do tenant consultados', {
-      adminUserId: req.user.userId,
-      tenantId: id,
-    });
-
     res.json({
-      tenant: {
-        ...tenant,
-        user_count: usersResult.rows.length,
-        device_count: devicesResult.rows.length,
-      },
+      tenant,
       users: usersResult.rows,
       devices: devicesResult.rows,
-      metrics: metricsResult.rows[0] || {
-        total_devices: 0,
-        online_devices: 0,
-        total_entities: 0,
+      stats: {
+        total_users: usersResult.rows.length,
+        total_devices: devicesResult.rows.length,
+        online_devices: devicesResult.rows.filter(d => d.status === 'online').length,
       },
     });
   } catch (error) {
-    logger.error('Erro ao buscar tenant', { error: error.message });
-    res.status(500).json({ error: 'Erro ao buscar tenant' });
+    logger.error({ error }, 'Erro ao buscar detalhes do tenant');
+    res.status(500).json({ error: 'Erro ao buscar detalhes do tenant' });
   }
 };
-
-/**
- * POST /api/v1/admin/tenants/:id/impersonate
- * Gera tokens para "logar como" um tenant (suporte técnico)
- */
-const impersonateTenant = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { reason } = req.body;
-
-    if (!reason || reason.trim().length < 10) {
-      return res.status(400).json({ 
-        error: 'Motivo é obrigatório (mínimo 10 caracteres)' 
-      });
-    }
-
-    // Buscar tenant
-    const tenantResult = await pool.query(
-      'SELECT id, name FROM tenants WHERE id = $1',
-      [id]
-    );
-
-    if (tenantResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Tenant não encontrado' });
-    }
-
-    const tenant = tenantResult.rows[0];
-
-    // Buscar um usuário tenant_admin desse tenant
-    const userResult = await pool.query(
-      `SELECT id, email, role 
-       FROM users 
-       WHERE tenant_id = $1 AND role = 'tenant_admin' 
-       LIMIT 1`,
-      [id]
-    );
-
-    if (userResult.rows.length === 0) {
-      return res.status(400).json({ 
-        error: 'Nenhum tenant_admin encontrado para este tenant' 
-      });
-    }
-
-    const user = userResult.rows[0];
-
-    // Gerar tokens como se fosse o tenant_admin
-    const accessToken = generateAccessToken({
-      userId: user.id,
-      tenantId: id,
-      role: user.role,
-    });
-
-    const refreshToken = generateRefreshToken();
-
-    // Salvar refresh token
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await pool.query(
-      'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
-      [user.id, refreshToken, expiresAt]
-    );
-
-    // Log de auditoria (IMPORTANTE para compliance)
-    logger.warn('Impersonate realizado', {
-      adminUserId: req.user.userId,
-      adminEmail: req.user.email,
-      targetTenantId: id,
-      targetTenantName: tenant.name,
-      targetUserId: user.id,
-      targetUserEmail: user.email,
-      reason: reason,
-      timestamp: new Date().toISOString(),
-    });
-
-    res.json({
-      message: 'Impersonate realizado com sucesso',
-      tenant: {
-        id: tenant.id,
-        name: tenant.name,
-      },
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      tokens: {
-        accessToken,
-        refreshToken,
-      },
-      expires_in: '15m',
-      warning: 'Use apenas para suporte técnico. Todas ações são auditadas.',
-    });
-  } catch (error) {
-    logger.error('Erro ao realizar impersonate', { error: error.message });
-    res.status(500).json({ error: 'Erro ao realizar impersonate' });
-  }
-};
-
-// ==================== DEVICES ====================
 
 /**
  * GET /api/v1/admin/devices
- * Lista TODOS os devices de TODOS os tenants (cross-tenant)
+ * Lista todos os devices (cross-tenant)
  */
-const getAllDevices = async (req, res) => {
+const listAllDevices = async (req, res) => {
   try {
-    const { 
-      tenant_id, 
-      status, 
-      limit = 50, 
-      offset = 0 
-    } = req.query;
+    const { status, tenant_id, limit = 10, offset = 0 } = req.query;
 
-    // Construir query dinamicamente
     let query = `
       SELECT 
         d.id,
@@ -263,81 +112,61 @@ const getAllDevices = async (req, res) => {
         t.name as tenant_name,
         COUNT(e.id) as entity_count
       FROM devices d
-      JOIN tenants t ON t.id = d.tenant_id
+      LEFT JOIN tenants t ON t.id = d.tenant_id
       LEFT JOIN entities e ON e.device_id = d.id
+      WHERE 1=1
     `;
 
     const params = [];
-    const conditions = [];
+    let paramIndex = 1;
 
-    // Filtro por tenant_id (opcional)
-    if (tenant_id) {
-      conditions.push(`d.tenant_id = $${params.length + 1}`);
-      params.push(tenant_id);
-    }
-
-    // Filtro por status (opcional)
-    if (status && status !== 'all') {
-      conditions.push(`d.status = $${params.length + 1}`);
+    if (status) {
+      query += ` AND d.status = $${paramIndex}`;
       params.push(status);
+      paramIndex++;
     }
 
-    // Adicionar WHERE se houver filtros
-    if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`;
+    if (tenant_id) {
+      query += ` AND d.tenant_id = $${paramIndex}`;
+      params.push(tenant_id);
+      paramIndex++;
     }
 
-    query += `
-      GROUP BY d.id, d.name, d.status, d.last_seen, d.created_at, d.tenant_id, t.name
-      ORDER BY d.created_at DESC
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
-    `;
-
+    query += ` GROUP BY d.id, d.name, d.status, d.last_seen, d.created_at, d.tenant_id, t.name`;
+    query += ` ORDER BY d.created_at DESC`;
+    query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(parseInt(limit), parseInt(offset));
 
     const result = await pool.query(query, params);
 
-    // Contar total (para paginação)
-    let countQuery = 'SELECT COUNT(DISTINCT d.id) as total FROM devices d';
-    const countParams = [];
+    const countQuery = `SELECT COUNT(*) as total FROM devices WHERE 1=1${
+      status ? ` AND status = '${status}'` : ''
+    }${tenant_id ? ` AND tenant_id = '${tenant_id}'` : ''}`;
 
-    if (tenant_id) {
-      countQuery += ' WHERE d.tenant_id = $1';
-      countParams.push(tenant_id);
-    }
-
-    const countResult = await pool.query(countQuery, countParams);
-
-    logger.info('Devices listados (admin)', {
-      adminUserId: req.user.userId,
-      filters: { tenant_id, status, limit, offset },
-      resultCount: result.rows.length,
-    });
+    const countResult = await pool.query(countQuery);
+    const total = parseInt(countResult.rows[0].total);
 
     res.json({
       devices: result.rows,
       pagination: {
-        total: parseInt(countResult.rows[0].total),
+        total,
         limit: parseInt(limit),
         offset: parseInt(offset),
-        hasMore: parseInt(offset) + result.rows.length < parseInt(countResult.rows[0].total),
+        hasMore: total > parseInt(offset) + parseInt(limit),
       },
     });
   } catch (error) {
-    logger.error('Erro ao listar devices (admin)', { error: error.message });
+    logger.error({ error }, 'Erro ao listar devices');
     res.status(500).json({ error: 'Erro ao listar devices' });
   }
 };
 
-// ==================== METRICS ====================
-
 /**
  * GET /api/v1/admin/metrics
- * Métricas agregadas da plataforma
+ * Métricas da plataforma
  */
-const getPlatformMetrics = async (req, res) => {
+const getMetrics = async (req, res) => {
   try {
-    // Métricas de tenants
     const tenantsResult = await pool.query(`
       SELECT 
         COUNT(*) as total_tenants,
@@ -345,52 +174,21 @@ const getPlatformMetrics = async (req, res) => {
       FROM tenants
     `);
 
-    // Métricas de usuários
     const usersResult = await pool.query(`
       SELECT 
         COUNT(*) as total_users,
-        COUNT(CASE WHEN role = 'super_admin' THEN 1 END) as super_admins,
-        COUNT(CASE WHEN role = 'tenant_admin' THEN 1 END) as tenant_admins,
-        COUNT(CASE WHEN role = 'user' THEN 1 END) as regular_users,
         COUNT(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN 1 END) as new_users_30d
       FROM users
     `);
 
-    // Métricas de devices
     const devicesResult = await pool.query(`
       SELECT 
         COUNT(*) as total_devices,
         COUNT(CASE WHEN status = 'online' THEN 1 END) as online_devices,
-        COUNT(CASE WHEN status = 'offline' THEN 1 END) as offline_devices,
-        COUNT(CASE WHEN status = 'unclaimed' THEN 1 END) as unclaimed_devices,
         COUNT(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN 1 END) as new_devices_30d,
-        COUNT(CASE WHEN last_seen >= NOW() - INTERVAL '24 hours' THEN 1 END) as active_24h
+        COUNT(CASE WHEN last_seen >= NOW() - INTERVAL '24 hours' THEN 1 END) as active_devices_24h
       FROM devices
     `);
-
-    // Métricas de entities
-    const entitiesResult = await pool.query(`
-      SELECT 
-        COUNT(*) as total_entities,
-        COUNT(DISTINCT device_id) as devices_with_entities,
-        COUNT(CASE WHEN entity_type = 'sensor' THEN 1 END) as sensors,
-        COUNT(CASE WHEN entity_type = 'switch' THEN 1 END) as switches,
-        COUNT(CASE WHEN entity_type = 'binary_sensor' THEN 1 END) as binary_sensors
-      FROM entities
-    `);
-
-    // Métricas de refresh tokens (atividade de login)
-    const tokensResult = await pool.query(`
-      SELECT 
-        COUNT(*) as total_active_tokens,
-        COUNT(CASE WHEN created_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as tokens_24h
-      FROM refresh_tokens
-      WHERE expires_at > NOW()
-    `);
-
-    logger.info('Métricas da plataforma consultadas', {
-      adminUserId: req.user.userId,
-    });
 
     res.json({
       platform: {
@@ -401,45 +199,147 @@ const getPlatformMetrics = async (req, res) => {
         total_devices: parseInt(devicesResult.rows[0].total_devices),
         online_devices: parseInt(devicesResult.rows[0].online_devices),
         new_devices_30d: parseInt(devicesResult.rows[0].new_devices_30d),
-        active_devices_24h: parseInt(devicesResult.rows[0].active_24h),
+        active_devices_24h: parseInt(devicesResult.rows[0].active_devices_24h),
       },
-      users: {
-        total: parseInt(usersResult.rows[0].total_users),
-        super_admins: parseInt(usersResult.rows[0].super_admins),
-        tenant_admins: parseInt(usersResult.rows[0].tenant_admins),
-        regular_users: parseInt(usersResult.rows[0].regular_users),
+      system: {
+        uptime: process.uptime(),
+        version: require('../../package.json').version,
       },
-      devices: {
-        total: parseInt(devicesResult.rows[0].total_devices),
-        online: parseInt(devicesResult.rows[0].online_devices),
-        offline: parseInt(devicesResult.rows[0].offline_devices),
-        unclaimed: parseInt(devicesResult.rows[0].unclaimed_devices),
-      },
-      entities: {
-        total: parseInt(entitiesResult.rows[0].total_entities),
-        devices_with_entities: parseInt(entitiesResult.rows[0].devices_with_entities),
-        sensors: parseInt(entitiesResult.rows[0].sensors),
-        switches: parseInt(entitiesResult.rows[0].switches),
-        binary_sensors: parseInt(entitiesResult.rows[0].binary_sensors),
-      },
-      activity: {
-        active_sessions: parseInt(tokensResult.rows[0].total_active_tokens),
-        logins_24h: parseInt(tokensResult.rows[0].tokens_24h),
-      },
-      timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    logger.error('Erro ao buscar métricas da plataforma', { error: error.message });
+    logger.error({ error }, 'Erro ao buscar métricas');
     res.status(500).json({ error: 'Erro ao buscar métricas' });
   }
 };
 
-// ==================== EXPORTS ====================
+/**
+ * POST /api/v1/admin/tenants/:id/impersonate
+ * Impersonate (fazer login como outro tenant para suporte)
+ */
+const impersonate = async (req, res) => {
+  try {
+    const { id: tenantId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || reason.trim().length < 10) {
+      return res.status(400).json({
+        error: 'Motivo obrigatório (mínimo 10 caracteres)',
+      });
+    }
+
+    const tenantResult = await pool.query(
+      'SELECT id, name FROM tenants WHERE id = $1',
+      [tenantId]
+    );
+
+    if (tenantResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Tenant não encontrado' });
+    }
+
+    const tenant = tenantResult.rows[0];
+
+    const userResult = await pool.query(
+      `SELECT id, email, role FROM users 
+       WHERE tenant_id = $1 AND role = 'tenant_admin' 
+       LIMIT 1`,
+      [tenantId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'Nenhum tenant_admin encontrado para este tenant',
+      });
+    }
+
+    const targetUser = userResult.rows[0];
+
+    const accessToken = generateAccessToken({
+      userId: targetUser.id,
+      tenantId: tenant.id,
+      role: targetUser.role,
+    });
+
+    const refreshToken = generateRefreshToken();
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+      [targetUser.id, refreshToken, expiresAt]
+    );
+
+    // Audit log: impersonate
+    await auditImpersonate(req, tenant, targetUser, reason);
+
+    res.json({
+      message: 'Impersonate realizado com sucesso',
+      warning: 'Você está logado como outro tenant. Use com responsabilidade.',
+      target_tenant: {
+        id: tenant.id,
+        name: tenant.name,
+      },
+      target_user: {
+        id: targetUser.id,
+        email: targetUser.email,
+        role: targetUser.role,
+      },
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Erro ao fazer impersonate');
+    res.status(500).json({ error: 'Erro ao fazer impersonate' });
+  }
+};
+
+/**
+ * GET /api/v1/admin/audit-logs
+ * Visualizar audit logs (para compliance)
+ */
+const listAuditLogs = async (req, res) => {
+  try {
+    const {
+      userId,
+      tenantId,
+      eventType,
+      startDate,
+      endDate,
+      limit = 50,
+      offset = 0,
+    } = req.query;
+
+    const logs = await getAuditLogs({
+      userId,
+      tenantId,
+      eventType,
+      startDate,
+      endDate,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+
+    const stats = await getAuditStats();
+
+    res.json({
+      logs,
+      stats,
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      },
+    });
+  } catch (error) {
+    logger.error({ error }, 'Erro ao buscar audit logs');
+    res.status(500).json({ error: 'Erro ao buscar audit logs' });
+  }
+};
 
 module.exports = {
-  getTenants,
-  getTenantById,
-  impersonateTenant,
-  getAllDevices,
-  getPlatformMetrics,
+  listTenants,
+  getTenantDetails,
+  listAllDevices,
+  getMetrics,
+  impersonate,
+  listAuditLogs,
 };
