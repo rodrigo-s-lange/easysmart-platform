@@ -1,179 +1,175 @@
 require('dotenv').config();
 const express = require('express');
-const helmet = require('helmet');
 const cors = require('cors');
-const pinoHttp = require('pino-http');
-
+const helmet = require('helmet');
 const logger = require('./config/logger');
-const { testConnection: testPostgres, closePool } = require('./config/database');
-const { testConnection: testInflux, close: closeInflux } = require('./config/influxdb');
-const { connect: connectMQTT, disconnect: disconnectMQTT, getStatus: getMQTTStatus } = require('./services/mqttService');
-const influxService = require('./services/influxService');
-const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const mqttService = require('./services/mqttService');
+const wsGateway = require('./services/wsGateway');
 
+// Routes
 const authRoutes = require('./routes/auth');
 const deviceRoutes = require('./routes/devices');
-const adminRoutes = require('./routes/admin');
 const telemetryRoutes = require('./routes/telemetry');
+const adminRoutes = require('./routes/admin');
+
+// Middleware
+const { authenticate } = require('./middleware/authenticate');
+const { requireSuperAdmin } = require('./middleware/requireSuperAdmin');
 
 const app = express();
 const PORT = process.env.PORT || 3010;
 
-app.use(pinoHttp({ logger }));
+// ============================================
+// MIDDLEWARES
+// ============================================
+
+// Security
 app.use(helmet());
+
+// CORS
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  credentials: true
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.get('/health', async (req, res) => {
-  const health = {
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    version: require('../package.json').version,
-    services: {
-      postgres: false,
-      influxdb: false,
-      mqtt: false,
-    },
-    influxWriter: null,
-  };
+// Body parser
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  try {
-    try {
-      await testPostgres();
-      health.services.postgres = true;
-    } catch (err) {
-      logger.warn({ err }, 'PostgreSQL health check failed');
-    }
-
-    try {
-      await testInflux();
-      health.services.influxdb = true;
-    } catch (err) {
-      logger.warn({ err }, 'InfluxDB health check failed');
-    }
-
-    const mqttStatus = getMQTTStatus();
-    health.services.mqtt = mqttStatus.connected;
-
-    // Métricas do Influx Writer
-    health.influxWriter = influxService.getMetrics();
-
-    const allServicesOk = Object.values(health.services).every(status => status === true);
-    health.status = allServicesOk ? 'ok' : 'degraded';
-
-    const statusCode = allServicesOk ? 200 : 503;
-    res.status(statusCode).json(health);
-  } catch (err) {
-    logger.error({ err }, 'Health check error');
-    health.status = 'error';
-    res.status(503).json(health);
-  }
+// Request logging
+app.use((req, res, next) => {
+  logger.info({
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+  });
+  next();
 });
 
-app.get('/', (req, res) => {
+// ============================================
+// HEALTH CHECK
+// ============================================
+
+app.get('/health', (req, res) => {
   res.json({
-    message: 'EasySmart IoT Platform API',
-    version: require('../package.json').version,
-    endpoints: {
-      health: '/health',
-      auth: '/api/v1/auth',
-      devices: '/api/v1/devices',
-      telemetry: '/api/v1/telemetry',
-    }
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
   });
 });
 
-// Rotas
+// ============================================
+// API ROUTES
+// ============================================
+
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/devices', deviceRoutes);
-app.use('/api/v1/admin', adminRoutes);
-app.use('/api/v1/telemetry', telemetryRoutes);
+app.use('/api/v1/devices', authenticate, deviceRoutes);
+app.use('/api/v1/telemetry', authenticate, telemetryRoutes);
+app.use('/api/v1/admin', authenticate, requireSuperAdmin, adminRoutes);
 
-app.use(notFoundHandler);
-app.use(errorHandler);
+// WebSocket stats endpoint
+app.get('/api/v1/ws/stats', authenticate, requireSuperAdmin, (req, res) => {
+  res.json(wsGateway.getStats());
+});
 
-async function startServer() {
-  try {
-    logger.info('🚀 Iniciando EasySmart Backend...');
+// ============================================
+// ERROR HANDLING
+// ============================================
 
-    logger.info('📊 Conectando ao PostgreSQL...');
-    await testPostgres();
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Not found',
+    path: req.path,
+  });
+});
 
-    logger.info('📈 Conectando ao InfluxDB...');
-    await testInflux();
+// Global error handler
+app.use((err, req, res, next) => {
+  logger.error({
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
 
-    logger.info('📡 Conectando ao MQTT...');
-    await connectMQTT();
+  res.status(err.status || 500).json({
+    success: false,
+    error: {
+      message: err.message,
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    },
+  });
+});
 
-    logger.info('💾 Iniciando Influx Writer (modo automático)');
-if (typeof influxService.startWriter === 'function') {
-  influxService.startWriter();
-} else {
-  logger.info('💾 InfluxService usando modo de escrita imediata (auto-flush).');
-}
+// ============================================
+// START SERVER
+// ============================================
 
+const server = app.listen(PORT, () => {
+  logger.info(`🚀 Servidor rodando na porta ${PORT}`);
+  logger.info(`📡 API disponível em http://localhost:${PORT}/api/v1`);
+  logger.info(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
 
-    const server = app.listen(PORT, () => {
-      logger.info({
-        port: PORT,
-        environment: process.env.NODE_ENV,
-        nodeVersion: process.version
-      }, `🚀 EasySmart Backend running on http://localhost:${PORT}`);
-    });
+// Iniciar MQTT Service
+mqttService.connect();
 
-    const gracefulShutdown = async (signal) => {
-      logger.info({ signal }, '⚠️  Shutdown signal recebido');
+// Iniciar WebSocket Gateway
+wsGateway.start(server);
+wsGateway.startHeartbeat();
+logger.info(`🔌 WebSocket disponível em ws://localhost:${PORT}/ws/telemetry`);
 
-      server.close(async () => {
-        logger.info('🔌 Servidor HTTP fechado');
+// ============================================
+// GRACEFUL SHUTDOWN
+// ============================================
 
-        try {
-          logger.info('🔌 Fechando conexões...');
-          
-          influxService.stopWriter();
-          await influxService.close();
-          await disconnectMQTT();
-          await closeInflux();
-          await closePool();
+const gracefulShutdown = (signal) => {
+  logger.info(`${signal} recebido, iniciando shutdown graceful...`);
 
-          logger.info('✅ Shutdown concluído');
-          process.exit(0);
-        } catch (err) {
-          logger.error({ err }, '❌ Erro durante shutdown');
-          process.exit(1);
-        }
-      });
+  // Fechar servidor HTTP
+  server.close(() => {
+    logger.info('✅ Servidor HTTP fechado');
 
-      setTimeout(() => {
-        logger.error('❌ Shutdown forçado após timeout');
-        process.exit(1);
-      }, 30000);
-    };
+    // Fechar MQTT
+    mqttService.disconnect();
+    logger.info('✅ MQTT desconectado');
 
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    // Fechar WebSocket
+    wsGateway.close();
+    logger.info('✅ WebSocket fechado');
 
-    process.on('uncaughtException', (err) => {
-      logger.fatal({ err }, '�� Uncaught Exception');
-      gracefulShutdown('uncaughtException');
-    });
+    logger.info('👋 Shutdown completo');
+    process.exit(0);
+  });
 
-    process.on('unhandledRejection', (reason, promise) => {
-      logger.fatal({ reason, promise }, '💥 Unhandled Rejection');
-      gracefulShutdown('unhandledRejection');
-    });
-
-  } catch (err) {
-    logger.fatal({ err }, '❌ Falha ao iniciar servidor');
+  // Forçar shutdown após 10 segundos
+  setTimeout(() => {
+    logger.error('⚠️ Shutdown forçado após timeout');
     process.exit(1);
-  }
-}
+  }, 10000);
+};
 
-startServer();
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Capturar erros não tratados
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error({
+    type: 'unhandledRejection',
+    reason,
+    promise,
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error({
+    type: 'uncaughtException',
+    error: error.message,
+    stack: error.stack,
+  });
+  process.exit(1);
+});
 
 module.exports = app;
