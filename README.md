@@ -1,377 +1,344 @@
-# EasySmart IoT Platform - Projeto em construção
+# 🚀 EasySmart IoT Platform
 
-**Última atualização:** 2025-10-18 11h30am 
-**Versão:** 0.3.0  
+> **Enterprise-grade Multi-tenant IoT Platform with ESPHome Integration**
 
-> **Plataforma IoT Industrial Multi-Tenant para Automação e Monitoramento**
+Modern, scalable IoT platform built for industrial applications with real-time telemetry, device management, and multi-tenancy support.
 
-![Version](https://img.shields.io/badge/version-0.3.0-blue)
-![Node](https://img.shields.io/badge/node-22.20.0-green)
-![License](https://img.shields.io/badge/license-MIT-blue)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/rodrigo-s-lange/easysmart-platform)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-22.20.0-brightgreen.svg)](https://nodejs.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16.10-blue.svg)](https://www.postgresql.org)
 
 ---
 
-## 📋 Índice
+## 📋 Table of Contents
 
-- [Visão Geral](#visão-geral)
-- [Status do Projeto](#status-do-projeto)
-- [Arquitetura](#arquitetura)
-- [Stack Tecnológica](#stack-tecnológica)
-- [Sistema de Roles](#sistema-de-roles)
-- [Setup e Instalação](#setup-e-instalação)
-- [API Reference](#api-reference)
-- [Database Schema](#database-schema)
-- [MQTT Topics](#mqtt-topics)
-- [Frontend Architecture](#frontend-architecture)
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [API Documentation](#api-documentation)
+- [Security](#security)
+- [Device Integration](#device-integration)
+- [Development](#development)
+- [Production Deployment](#production-deployment)
 - [Roadmap](#roadmap)
-- [Colaboração com LLMs](#colaboração-com-llms)
-- [Troubleshooting](#troubleshooting)
-- [Recursos Adicionais](#recursos-adicionais)
-- [Contexto Industrial](#contexto-industrial)
-- [Segurança](#segurança)
-- [Performance](#performance)
-- [Contribuindo](#contribuindo)
-- [Licença](#licença)
-- [Contato](#contato)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## 🎯 Visão Geral
+## 🎯 Overview
 
-EasySmart é uma plataforma IoT industrial multi-tenant focada em:
-- **Monitoramento em tempo real** via RS485/Modbus
-- **Integração ESPHome** (ESP32/ESP32-S3)
-- **Integração Proprietária** (ESP32/ESP32-S3/STM32Hxxx/RP2040/CNC/3D_PRINT/etc)
-- **Dashboards SCADA-like** para análise de dados
-- **Multi-tenancy** com isolamento total de dados e segurança reforçada
-- **Admin Panel** para gestão de clientes e plataforma
-- **Futuro:** Suporte a CLPs e linguagem proprietária YAML auxiliada por LLMs
+**EasySmart** is a production-ready IoT platform designed for industrial applications, focusing on:
 
-### 🎨 Filosofia de Design
-- **Não copiar Home Assistant** (mas basear-se no mesmo conceito)
-- **Inspiração:** Vercel, Linear, Grafana, Notion
-- **Foco:** Dashboards profissionais para ambiente industrial
+- 🏢 **Multi-tenancy**: Complete data isolation between tenants
+- 🔐 **Enterprise Security**: JWT auth, RBAC, rate limiting, audit logs
+- 📡 **Real-time Telemetry**: MQTT + InfluxDB for time-series data
+- 🎛️ **ESPHome Integration**: First-class support for ESP32 devices
+- 📊 **Admin Dashboard**: Cross-tenant management and metrics
+- 🔄 **Auto-discovery**: Zero-config device provisioning
 
 ---
 
-## 📊 Status do Projeto
+## ✨ Features
 
-### ✅ Concluído (v0.2.1)
+### Core Features
 
-#### **Phase 1: Backend Core** ✅
-- [x] Express 5.1.0 + Security (Helmet, CORS)
-- [x] PostgreSQL 16 + InfluxDB 2.x
-- [x] MQTT (Mosquitto) + Auto-discovery
-- [x] JWT Authentication (access 15min + refresh 7d)
-- [x] Multi-tenancy (row-level security)
-- [x] Device Management (CRUD + Provisioning)
-- [x] Telemetry API (buffer + batch write)
-- [x] Logging estruturado (Pino)
+✅ **Multi-tenant Architecture**
+- Complete data isolation (row-level security)
+- Tenant-specific user management
+- Cross-tenant admin panel for platform operators
 
-#### **Phase 2.1: Frontend Authentication** ✅
-- [x] React 18 + TypeScript + Vite 8
-- [x] TailwindCSS v3 + shadcn/ui
-- [x] Login/Register com validação (Zod)
-- [x] JWT token management + auto-refresh
-- [x] Protected routes
-- [x] Zustand (auth state) + React Query
-- [x] Design profissional (dark theme + gradientes)
-- [x] Multi-tenancy validado e funcionando
+✅ **Authentication & Authorization**
+- JWT-based authentication (access + refresh tokens)
+- Role-Based Access Control (RBAC)
+  - `super_admin`: Platform administrator
+  - `tenant_admin`: Tenant administrator
+  - `user`: Regular user
+- Token refresh mechanism
+- Secure password hashing (bcrypt)
 
-### ✅ Concluído Recentemente
+✅ **Rate Limiting & Security**
+- Login: 5 attempts / 15min
+- Register: 3 attempts / hour
+- API: 100 requests / 15min
+- Admin: 200 requests / 15min
+- Brute force protection
 
-#### **Phase 2.1.5: Role System & Admin Base** ✅ (Concluído: 2025-10-18)
+✅ **Audit Logging**
+- All critical actions logged
+- Compliance-ready (LGPD/GDPR)
+- IP address and user agent tracking
+- Login/logout tracking
+- Failed authentication attempts
+- 9 optimized indexes for fast queries
 
-**Sprint 1: Backend - Roles** ✅
-- [x] Sistema de roles (super_admin, tenant_admin, user)
-- [x] Migration add role column
-- [x] Middleware requireSuperAdmin
-- [x] AuthController atualizado (role no JWT)
-- [x] Endpoint /users/me
-- [x] Testes validados
+✅ **Device Management**
+- MQTT auto-discovery (ESPHome compatible)
+- Device provisioning with tokens
+- Real-time status tracking
+- Entity management (sensors, switches, binary sensors)
+- Metadata storage (JSON)
 
-**Sprint 2: Admin Routes** ✅
-- [x] AdminController completo (5 endpoints)
-- [x] GET /admin/tenants (lista com métricas)
-- [x] GET /admin/tenants/:id (detalhes)
-- [x] POST /admin/tenants/:id/impersonate (suporte)
-- [x] GET /admin/devices (cross-tenant)
-- [x] GET /admin/metrics (métricas plataforma)
-- [x] Testes automatizados (6/6 passing)
-- [x] Multi-tenancy isolamento validado
+✅ **Telemetry System**
+- Time-series data storage (InfluxDB)
+- Real-time data ingestion via MQTT
+- Support for multiple value types (float, bool, string)
+- Aggregation and querying
+- Device caching for performance
 
-### 🚧 Próximo
-
-#### **Phase 2.2: Device Management UI** (8-10h)
-- [ ] Sidebar navigation (colapsável + roles)
-- [ ] Dashboard adaptativo (mobile + desktop)
-- [ ] Device list (grid cards responsivo)
-- [ ] Entity modal com gráfico temporal
-- [ ] Export CSV de telemetria
-
-#### **Phase 2.3: Admin Panel UI** (Depois - 6-8h)
-- [ ] Gestão de Tenants
-- [ ] View Global de Devices (cross-tenant)
-- [ ] Métricas agregadas da plataforma
-- [ ] Impersonate UI
+✅ **Admin Panel API**
+- Cross-tenant device listing
+- Platform metrics and statistics
+- Tenant management
+- User impersonation (for support)
+- Audit log viewing
 
 ---
 
-## 🏗️ Arquitetura
+## 🏗️ Architecture
 
 ```
-┌───────────────────────────────────────────────────────┐
-│                     FRONTEND (React)                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │  Dashboard  │  │   Devices   │  │Admin Panel  │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘    │
-│         │ HTTP (Axios + React Query) │                │
-└─────────┼─────────────────────────────────────────────┘
-          │
-          ▼
-┌───────────────────────────────────────────────────────┐
-│              BACKEND (Node.js + Express)              │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐             │
-│  │   Auth   │  │  Device  │  │  Admin   │             │
-│  │   API    │  │   API    │  │   API    │             │
-│  └──────────┘  └──────────┘  └──────────┘             │
-│         │              │              │               │
-└─────────┼──────────────┼──────────────┼───────────────┘
-          │              │              │
-    ┌─────▼─────┐  ┌─────▼─────┐  ┌─────▼─────┐
-    │PostgreSQL │  │  InfluxDB │  │   MQTT    │
-    │  (Users,  │  │Time-series│  │(Broker)   │
-    │  Devices) │  │   Data    │  │           │
-    └───────────┘  └───────────┘  └─────┬─────┘
-                                        │
-                                        ▼
-                                  ┌─────────────┐
-                                  │  ESPHome    │
-                                  │  Devices    │
-                                  │(ESP32/STM32)│
-                                  └─────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                       EASYSMART PLATFORM                   │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │   Frontend   │    │   Backend    │    │   Devices    │  │
+│  │  React 18    │──▶ │   Node 22    │◀──│   ESP32      │  │
+│  │  Vite + TS   │    │   Express    │    │   ESPHome    │  │
+│  └──────────────┘    └──────┬───────┘    └──────────────┘  │
+│                              │                             │
+│                    ┌─────────┼─────────┐                   │
+│                    │         │         │                   │
+│              ┌─────▼───┐ ┌──▼────┐ ┌──▼────┐               │
+│              │PostgreSQL│ │InfluxDB│ │ MQTT  │             │
+│              │  Users   │ │Telemetry│ │Broker │            │
+│              │  Devices │ │Time-series││Mosquitto│         │
+│              └──────────┘ └────────┘ └───────┘             │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
 ```
 
-### 🔐 Multi-Tenancy
+### Data Flow
 
-**Row-Level Security:**
-```sql
--- Todos os devices pertencem a um tenant
-SELECT * FROM devices WHERE tenant_id = $current_user_tenant_id
 ```
-
-**JWT Payload:**
-```json
-{
-  "userId": "uuid",
-  "tenantId": "uuid",
-  "role": "super_admin",
-  "iat": 1234567890,
-  "exp": 1234568790
-}
+ESP32 Device
+    │
+    │ (MQTT Discovery)
+    ▼
+Mosquitto Broker
+    │
+    │ (Subscribe)
+    ▼
+Backend MQTT Service
+    │
+    ├─▶ PostgreSQL (Device metadata, entities)
+    │
+    └─▶ InfluxDB (Telemetry time-series)
 ```
 
 ---
 
-## 🛠️ Stack Tecnológica
+## 🛠️ Tech Stack
 
-### **Backend**
-| Tecnologia | Versão | Propósito |
-|------------|--------|-----------|
-| Node.js | 22.20.0 LTS | Runtime (suporte até 2027) |
-| Express | 5.1.0 | API REST |
-| PostgreSQL | 16.10 | Dados relacionais |
-| InfluxDB | 2.x | Time-series (telemetria) |
-| Mosquitto | Latest | MQTT Broker |
-| Pino | 9.5.0 | Logging estruturado |
-| bcrypt | Latest | Hash de senhas |
-| jsonwebtoken | Latest | JWT auth |
+### Backend
+- **Runtime**: Node.js 22.20.0
+- **Framework**: Express 4.x
+- **Database**: PostgreSQL 16.10 (users, devices, entities)
+- **Time-series**: InfluxDB 2.x (telemetry data)
+- **Message Broker**: Mosquitto MQTT 2.x
+- **Authentication**: JWT (jsonwebtoken)
+- **Logging**: Pino (structured logs)
+- **Validation**: Express validators
+- **Security**: Helmet, bcrypt, rate limiting
 
-### **Frontend**
-| Tecnologia | Versão | Propósito |
-|------------|--------|-----------|
-| React | 18 | UI Framework |
-| TypeScript | Latest | Type safety |
-| Vite | 8 | Build tool |
-| TailwindCSS | 3.4.0 | Styling |
-| shadcn/ui | Latest | Componentes UI |
-| Zustand | Latest | State (auth) |
-| React Query | Latest | Data fetching + cache |
-| React Router | Latest | Navegação |
-| Axios | Latest | HTTP client |
-| Recharts | Latest | Gráficos |
-| Zod | Latest | Validação |
-| React Hook Form | Latest | Forms |
+### Frontend
+- **Framework**: React 18
+- **Build**: Vite
+- **Language**: TypeScript
+- **UI**: Tailwind CSS + shadcn/ui
+- **State**: Zustand
+- **HTTP**: Axios + React Query
 
-### **Infraestrutura**
-- **Docker** para serviços (PostgreSQL, InfluxDB, MQTT)
-- **nvm** para gerenciamento de Node.js
-- **Git** para versionamento
+### Infrastructure
+- **Containerization**: Docker + Docker Compose
+- **Reverse Proxy**: Nginx (production)
+- **Process Manager**: PM2 (production)
+- **Monitoring**: Portainer CE
+
+### Device Firmware
+- **Platform**: ESPHome 2025.10.2
+- **Hardware**: ESP32, ESP32-S3
+- **Protocol**: MQTT
 
 ---
 
-## 🔐 Sistema de Roles
+## 🚀 Getting Started
 
-### **Níveis de Acesso**
+### Prerequisites
 
-#### **1. SUPER_ADMIN (Você - EasySmart)**
-- ✅ Acessa **TODOS** os tenants
-- ✅ Gerencia tenants e usuários
-- ✅ Vê métricas globais da plataforma
-- ✅ Pode "impersonate" qualquer tenant para suporte
-- ✅ Acesso exclusivo ao Admin Panel
+- **Node.js** 22.20.0+ ([Download](https://nodejs.org))
+- **Docker** & **Docker Compose** ([Download](https://docs.docker.com/get-docker/))
+- **Git** ([Download](https://git-scm.com/downloads))
 
-#### **2. TENANT_ADMIN (Cliente)**
-- ✅ Acessa apenas **SEU** tenant
-- ✅ Gerencia devices do tenant
-- ✅ Gerencia usuários do tenant
-- ✅ Vê métricas do tenant
-- ❌ Sem acesso ao Admin Panel
+### Quick Start
 
-#### **3. USER (Usuário do Cliente)**
-- ✅ Acessa apenas **SEU** tenant
-- ✅ View-only ou permissões limitadas
-- ❌ Não gerencia usuários
-- ❌ Sem acesso ao Admin Panel
-
-### **Database Schema - Roles**
-
-```sql
--- Coluna role em users
-ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
-
--- Valores possíveis:
--- 'super_admin' → Administrador da plataforma
--- 'tenant_admin' → Administrador do tenant
--- 'user' → Usuário comum
-```
-
----
-
-## 🚀 Setup e Instalação
-
-### **Pré-requisitos**
-
-```bash
-# Node.js 22 LTS
-node --version  # v22.20.0
-
-# Docker (para serviços)
-docker --version
-
-# nvm (recomendado)
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-```
-
-### **1. Clonar Repositório**
+#### 1. Clone Repository
 
 ```bash
 git clone https://github.com/rodrigo-s-lange/easysmart-platform.git
 cd easysmart-platform
 ```
 
-### **2. Instalar Node.js 22**
-
-```bash
-nvm install 22
-nvm use 22
-nvm alias default 22
-node --version  # Deve mostrar v22.20.0
-```
-
-### **3. Backend Setup**
-
-```bash
-cd backend
-
-# Instalar dependências
-npm install
-
-# Copiar .env de exemplo
-cp .env.example .env
-
-# Editar credenciais
-nano .env
-
-# Rodar migrations
-npm run migrate up
-
-# Iniciar servidor
-npm run dev
-```
-
-**Backend roda em:** `http://localhost:3010`  
-_Nota: Porta 3010 evita conflito com VSCode (padrão seria 3001)_
-
-### **4. Frontend Setup**
-
-```bash
-cd ../frontend
-
-# Instalar dependências
-npm install
-
-# Iniciar dev server
-npm run dev
-```
-
-**Frontend roda em:** `http://localhost:5173`
-
-### **5. Serviços Docker**
+#### 2. Start Infrastructure
 
 ```bash
 cd ~/docker
+docker-compose up -d
 
-# Verificar status
+# Verify services
 docker ps
-
-# Iniciar se necessário
-docker-compose up -d postgres influxdb mosquitto
 ```
 
-### **6. Validar Instalação**
+**Services running:**
+- PostgreSQL: `localhost:5432`
+- InfluxDB: `localhost:8086`
+- Mosquitto: `localhost:1883`
+- ESPHome: `localhost:6052`
+
+#### 3. Setup Backend
 
 ```bash
-# Backend health check
-curl http://localhost:3010/health | jq
+cd ~/easysmart-platform/backend
 
-# Deve retornar:
-# {
-#   "status": "ok",
-#   "services": {
-#     "postgres": true,
-#     "influxdb": true,
-#     "mqtt": true
-#   }
-# }
+# Install dependencies
+npm install
 
-# Frontend (abrir navegador)
-# http://localhost:5173
-# Login: admin@easysmart.io / admin123456
+# Copy environment file
+cp .env.example .env
+
+# Edit .env with your credentials
+nano .env
+
+# Run migrations
+npm run migrate:up
+
+# Start development server
+npm run dev
+```
+
+**Backend running:** `http://localhost:3010`
+
+#### 4. Setup Frontend
+
+```bash
+cd ~/easysmart-platform/frontend
+
+# Install dependencies
+npm install
+
+# Copy environment file
+cp .env.example .env
+
+# Start development server
+npm run dev
+```
+
+**Frontend running:** `http://localhost:5173`
+
+#### 5. Create Super Admin
+
+```bash
+# Login to PostgreSQL
+docker exec -it postgres psql -U postgres -d easysmart
+
+# Create admin user
+INSERT INTO tenants (name) VALUES ('EasySmart Platform');
+
+INSERT INTO users (tenant_id, email, password_hash, role) 
+SELECT 
+  id,
+  'admin@easysmart.io',
+  '$2b$10$...',  -- Use bcrypt to hash 'admin123456'
+  'super_admin'
+FROM tenants WHERE name = 'EasySmart Platform';
+```
+
+**Login:** `admin@easysmart.io` / `admin123456`
+
+---
+
+## 📁 Project Structure
+
+```
+easysmart-platform/
+├── backend/
+│   ├── src/
+│   │   ├── config/           # Database, InfluxDB, Logger
+│   │   ├── controllers/      # Request handlers
+│   │   ├── middleware/       # Auth, RBAC, Rate limiting
+│   │   ├── routes/           # API routes
+│   │   ├── services/         # Business logic (MQTT, Influx)
+│   │   ├── utils/            # Helpers, Token, Audit logger
+│   │   └── server.js         # Entry point
+│   ├── migrations/           # Database migrations
+│   ├── package.json
+│   └── .env
+├── frontend/
+│   ├── src/
+│   │   ├── components/       # React components
+│   │   ├── pages/            # Page components
+│   │   ├── lib/              # API clients, utils
+│   │   ├── stores/           # Zustand stores
+│   │   └── main.tsx          # Entry point
+│   ├── package.json
+│   └── .env
+├── docker/                   # Infrastructure
+│   └── docker-compose.yml
+├── docs/                     # Documentation
+├── README.md
+├── CHANGELOG.md
+└── LICENSE
 ```
 
 ---
 
-## 🔌 API Reference
+## 📖 API Documentation
 
-### **Base URL**
+### Base URL
+
 ```
 http://localhost:3010/api/v1
 ```
 
+### Authentication
+
+All protected endpoints require JWT token in header:
+
+```
+Authorization: Bearer <access_token>
+```
+
 ---
 
-## 📡 Authentication
+### 🔐 Auth Endpoints
 
-### `POST /auth/register`
-Cria novo usuário e tenant.
+#### `POST /auth/register`
 
-**Body:**
+Register new tenant + admin user.
+
+**Rate limit:** 3 requests/hour
+
+**Request:**
 ```json
 {
   "email": "user@example.com",
-  "password": "senha123456",
-  "tenant_name": "Minha Empresa"
+  "password": "securepass123",
+  "tenant_name": "My Company"
 }
 ```
 
@@ -385,1265 +352,876 @@ Cria novo usuário e tenant.
     "role": "tenant_admin"
   },
   "tokens": {
-    "accessToken": "jwt...",
-    "refreshToken": "rt_..."
+    "accessToken": "eyJhbGc...",
+    "refreshToken": "rt_abc..."
   }
 }
 ```
-
-### `POST /auth/login`
-Autenticação de usuário.
-
-**Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "senha123456"
-}
-```
-
-### `POST /auth/refresh`
-Renova access token.
-
-**Body:**
-```json
-{
-  "refreshToken": "rt_..."
-}
-```
-
-### `POST /auth/logout`
-Invalida refresh token.
-
-**Headers:** `Authorization: Bearer {accessToken}`
 
 ---
 
-## 🔌 Devices API
+#### `POST /auth/login`
 
-**Todas as rotas requerem:** `Authorization: Bearer {accessToken}`
+Authenticate user.
 
-### `GET /devices`
-Lista devices do tenant autenticado.
+**Rate limit:** 5 attempts/15min
 
-**Response:**
-```json
-[
-  {
-    "id": "uuid",
-    "name": "Sensor Admin 1",
-    "status": "online",
-    "last_seen": "2025-10-17T09:26:47.363Z",
-    "device_token": "easysmrt_dev_...",
-    "metadata": {
-      "location": "sala",
-      "type": "temperature"
-    },
-    "created_at": "2025-10-17T09:26:47.363Z"
-  }
-]
-```
-
-### `GET /devices/:id`
-Detalhes de um device específico.
-
-### `GET /devices/:id/entities`
-Lista entities de um device.
-
-**Response:**
-```json
-[
-  {
-    "id": "uuid",
-    "entity_id": "temperature",
-    "entity_type": "sensor",
-    "device_class": "temperature",
-    "name": "Temperature",
-    "unit_of_measurement": "°C",
-    "state": "23.5",
-    "attributes": {},
-    "last_updated": "2025-10-17T09:30:00.000Z"
-  }
-]
-```
-
-### `POST /devices/provision`
-Cria novo device.
-
-**Body:**
+**Request:**
 ```json
 {
-  "name": "Sensor 1",
-  "metadata": {
-    "location": "sala"
-  }
+  "email": "admin@easysmart.io",
+  "password": "admin123456"
 }
 ```
 
-### `DELETE /devices/:id`
-Remove device (e suas entities em cascata).
-
----
-
-## 🔧 Admin API (SUPER_ADMIN apenas)
-
-📖 Admin API - Guia de Uso Completo
-🎯 Visão Geral
-As rotas administrativas são protegidas e requerem:
-
-✅ Autenticação válida (JWT token)
-✅ Role super_admin
-
-Base URL: http://localhost:3010/api/v1/admin
-
-🔐 Autenticação
-Todas as requisições devem incluir o header de autorização:
-bashAuthorization: Bearer {accessToken}
-Exemplo de obtenção do token:
-bash# Login como super_admin
-TOKEN=$(curl -s -X POST http://localhost:3010/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@easysmart.io","password":"admin123456"}' \
-  | jq -r '.tokens.accessToken')
-
-# Usar token nas requisições admin
-curl -H "Authorization: Bearer $TOKEN" http://localhost:3010/api/v1/admin/tenants
-
-📋 1. GET /admin/tenants
-Descrição: Lista todos os tenants da plataforma com métricas agregadas.
-Método: GET
-URL: /api/v1/admin/tenants
-Auth: Requer super_admin
-Response:
-json{
-  "tenants": [
-    {
-      "id": "uuid",
-      "name": "Tech Solutions Ltda",
-      "created_at": "2025-10-17T12:00:00Z",
-      "user_count": "2",
-      "device_count": "5",
-      "status": "active"
-    },
-    {
-      "id": "uuid",
-      "name": "Indústria XYZ",
-      "created_at": "2025-10-16T08:30:00Z",
-      "user_count": "1",
-      "device_count": "0",
-      "status": "inactive"
-    }
-  ],
-  "total": 2
-}
-Status do Tenant:
-
-active: Possui devices cadastrados
-inactive: Sem devices cadastrados
-
-Exemplo cURL:
-bashcurl -X GET http://localhost:3010/api/v1/admin/tenants \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  | jq '.'
-
-📊 2. GET /admin/tenants/:id
-Descrição: Detalhes completos de um tenant específico incluindo usuários, devices e métricas.
-Método: GET
-URL: /api/v1/admin/tenants/{tenant_id}
-Auth: Requer super_admin
-Response:
-json{
-  "tenant": {
-    "id": "uuid",
-    "name": "Tech Solutions Ltda",
-    "created_at": "2025-10-17T12:00:00Z",
-    "user_count": 2,
-    "device_count": 5
-  },
-  "users": [
-    {
-      "id": "uuid",
-      "email": "admin@techsolutions.com",
-      "role": "tenant_admin",
-      "created_at": "2025-10-17T12:00:00Z"
-    },
-    {
-      "id": "uuid",
-      "email": "operator@techsolutions.com",
-      "role": "user",
-      "created_at": "2025-10-17T14:30:00Z"
-    }
-  ],
-  "devices": [
-    {
-      "id": "uuid",
-      "name": "Sensor Caldeira 1",
-      "status": "online",
-      "last_seen": "2025-10-18T10:00:00Z",
-      "created_at": "2025-10-17T13:00:00Z",
-      "entity_count": "3"
-    }
-  ],
-  "metrics": {
-    "total_devices": "5",
-    "online_devices": "3",
-    "total_entities": "15"
-  }
-}
-Exemplo cURL:
-bashTENANT_ID="seu-tenant-id-aqui"
-curl -X GET "http://localhost:3010/api/v1/admin/tenants/$TENANT_ID" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  | jq '.'
-
-🎭 3. POST /admin/tenants/:id/impersonate
-Descrição: Gera tokens para "logar como" um tenant específico (recurso de suporte técnico).
-Método: POST
-URL: /api/v1/admin/tenants/{tenant_id}/impersonate
-Auth: Requer super_admin
-Body:
-json{
-  "reason": "Suporte técnico - debug de sensores offline"
-}
-Validações:
-
-✅ reason é obrigatório
-✅ Mínimo de 10 caracteres
-✅ Tenant deve ter pelo menos 1 tenant_admin
-
-Response:
-json{
-  "message": "Impersonate realizado com sucesso",
-  "tenant": {
-    "id": "uuid",
-    "name": "Tech Solutions Ltda"
-  },
+**Response:**
+```json
+{
   "user": {
     "id": "uuid",
-    "email": "admin@techsolutions.com",
-    "role": "tenant_admin"
+    "email": "admin@easysmart.io",
+    "tenant_id": "uuid",
+    "role": "super_admin"
   },
   "tokens": {
-    "accessToken": "eyJ...",
-    "refreshToken": "rt_..."
-  },
-  "expires_in": "15m",
-  "warning": "Use apenas para suporte técnico. Todas ações são auditadas."
-}
-Auditoria:
-Todas ações de impersonate são registradas nos logs com:
-
-ID do super_admin
-Email do super_admin
-Tenant alvo
-Usuário impersonado
-Motivo fornecido
-Timestamp
-
-Exemplo cURL:
-bashTENANT_ID="seu-tenant-id-aqui"
-curl -X POST "http://localhost:3010/api/v1/admin/tenants/$TENANT_ID/impersonate" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "reason": "Suporte técnico - verificar configuração de sensores"
-  }' \
-  | jq '.'
-
-# Usar tokens retornados para acessar como tenant
-TENANT_TOKEN=$(echo $RESPONSE | jq -r '.tokens.accessToken')
-curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3010/api/v1/devices
-
-🔌 4. GET /admin/devices
-Descrição: Lista TODOS os devices de TODOS os tenants (visão cross-tenant).
-Método: GET
-URL: /api/v1/admin/devices
-Auth: Requer super_admin
-Query Parameters:
-ParâmetroTipoObrigatórioDescriçãoValorestenant_idUUIDNãoFiltrar por tenant específicoUUID do tenantstatusStringNãoFiltrar por statusonline, offline, unclaimed, alllimitIntegerNãoItens por páginaPadrão: 50, Max: 100offsetIntegerNãoPaginaçãoPadrão: 0
-Response:
-json{
-  "devices": [
-    {
-      "id": "uuid",
-      "name": "Sensor Caldeira 1",
-      "status": "online",
-      "last_seen": "2025-10-18T10:00:00Z",
-      "created_at": "2025-10-17T13:00:00Z",
-      "tenant_id": "uuid",
-      "tenant_name": "Tech Solutions Ltda",
-      "entity_count": "3"
-    }
-  ],
-  "pagination": {
-    "total": 127,
-    "limit": 50,
-    "offset": 0,
-    "hasMore": true
+    "accessToken": "eyJhbGc...",
+    "refreshToken": "rt_abc..."
   }
 }
-Exemplos cURL:
-bash# Listar todos devices (primeira página)
-curl -X GET "http://localhost:3010/api/v1/admin/devices?limit=10" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  | jq '.'
+```
 
-# Filtrar por tenant
-curl -X GET "http://localhost:3010/api/v1/admin/devices?tenant_id=$TENANT_ID&limit=20" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  | jq '.'
+---
 
-# Filtrar apenas devices online
-curl -X GET "http://localhost:3010/api/v1/admin/devices?status=online&limit=50" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  | jq '.'
+#### `POST /auth/refresh`
 
-# Paginação (próxima página)
-curl -X GET "http://localhost:3010/api/v1/admin/devices?limit=50&offset=50" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  | jq '.'
+Refresh access token.
 
-📊 5. GET /admin/metrics
-Descrição: Métricas agregadas de toda a plataforma.
-Método: GET
-URL: /api/v1/admin/metrics
-Auth: Requer super_admin
-Response:
-json{
-  "platform": {
-    "total_tenants": 15,
-    "new_tenants_30d": 3,
-    "total_users": 38,
-    "new_users_30d": 7,
-    "total_devices": 127,
-    "online_devices": 98,
-    "new_devices_30d": 15,
-    "active_devices_24h": 92
-  },
-  "users": {
-    "total": 38,
-    "super_admins": 1,
-    "tenant_admins": 15,
-    "regular_users": 22
-  },
-  "devices": {
-    "total": 127,
-    "online": 98,
-    "offline": 27,
-    "unclaimed": 2
-  },
-  "entities": {
-    "total": 384,
-    "devices_with_entities": 125,
-    "sensors": 320,
-    "switches": 45,
-    "binary_sensors": 19
-  },
-  "activity": {
-    "active_sessions": 42,
-    "logins_24h": 18
-  },
-  "timestamp": "2025-10-18T10:48:25.193Z"
+**Request:**
+```json
+{
+  "refreshToken": "rt_abc..."
 }
-Métricas Incluídas:
-Platform:
+```
 
-total_tenants: Total de tenants cadastrados
-new_tenants_30d: Novos tenants nos últimos 30 dias
-total_users: Total de usuários na plataforma
-new_users_30d: Novos usuários nos últimos 30 dias
-total_devices: Total de devices cadastrados
-online_devices: Devices atualmente online
-new_devices_30d: Novos devices nos últimos 30 dias
-active_devices_24h: Devices que enviaram dados nas últimas 24h
-
-Users:
-
-Distribuição por role (super_admins, tenant_admins, regular_users)
-
-Devices:
-
-Distribuição por status (online, offline, unclaimed)
-
-Entities:
-
-Total de entities
-Devices com entities configuradas
-Distribuição por tipo (sensors, switches, binary_sensors)
-
-Activity:
-
-active_sessions: Sessões ativas (refresh tokens válidos)
-logins_24h: Logins nas últimas 24 horas
-
-Exemplo cURL:
-bashcurl -X GET http://localhost:3010/api/v1/admin/metrics \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  | jq '.'
-
-🔒 Segurança e Controle de Acesso
-Middleware requireSuperAdmin
-Todas as rotas admin são protegidas pelo middleware requireSuperAdmin:
-Fluxo de Validação:
-1. Request chega no endpoint /admin/*
-   ↓
-2. Middleware requireAuth valida JWT
-   ↓
-3. Middleware requireSuperAdmin verifica role
-   ↓
-4. Se role != 'super_admin' → 403 Forbidden
-   ↓
-5. Se role == 'super_admin' → Acesso permitido
-Response de Acesso Negado:
-json{
-  "error": "Access denied. Super admin privileges required.",
-  "requiredRole": "super_admin",
-  "currentRole": "tenant_admin"
+**Response:**
+```json
+{
+  "tokens": {
+    "accessToken": "eyJhbGc...",
+    "refreshToken": "rt_def..."
+  }
 }
-Auditoria
-Todas ações admin são registradas nos logs estruturados:
-Login como super_admin:
-json{
-  "level": "info",
-  "msg": "Login realizado",
-  "userId": "uuid",
-  "email": "admin@easysmart.io",
-  "role": "super_admin"
+```
+
+---
+
+#### `POST /auth/logout`
+
+Logout user (invalidate refresh token).
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Request:**
+```json
+{
+  "refreshToken": "rt_abc..."
 }
-Tentativa de acesso não autorizado:
-json{
-  "level": "warn",
-  "msg": "Unauthorized admin access attempt",
-  "userId": "uuid",
-  "userRole": "tenant_admin",
-  "tenantId": "uuid",
-  "path": "/api/v1/admin/tenants",
-  "method": "GET"
+```
+
+**Response:**
+```json
+{
+  "message": "Logout realizado com sucesso"
 }
-Impersonate (CRÍTICO):
-json{
-  "level": "warn",
-  "msg": "Impersonate realizado",
-  "adminUserId": "uuid",
-  "adminEmail": "admin@easysmart.io",
-  "targetTenantId": "uuid",
-  "targetTenantName": "Tech Solutions Ltda",
-  "targetUserId": "uuid",
-  "targetUserEmail": "admin@techsolutions.com",
-  "reason": "Suporte técnico - debug de sensores",
-  "timestamp": "2025-10-18T10:30:00Z"
+```
+
+---
+
+#### `GET /auth/users/me`
+
+Get current user info.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "user": {
+    "id": "uuid",
+    "email": "admin@easysmart.io",
+    "tenant_id": "uuid",
+    "role": "super_admin",
+    "created_at": "2025-10-16T22:31:00.102Z"
+  }
 }
+```
 
-🧪 Testes Automatizados
-Script: backend/test-admin-routes.sh
-Execute todos os testes:
-bashchmod +x ~/easysmart-platform/backend/test-admin-routes.sh
-~/easysmart-platform/backend/test-admin-routes.sh
-Testes Incluídos:
+---
 
-✅ Obtenção de token super_admin
-✅ GET /admin/tenants
-✅ GET /admin/tenants/:id
-✅ GET /admin/devices (com filtros)
-✅ GET /admin/metrics
-✅ Bloqueio de acesso (tenant_admin)
-✅ POST /admin/tenants/:id/impersonate
+### 📱 Device Endpoints
 
-Output Esperado:
-==========================================
-🧪 Testes - Admin Routes (Sprint 2)
-==========================================
+#### `GET /devices`
 
-✅ Token obtido (role: super_admin)
-✅ Tenants listados: 4 tenants
-✅ Detalhes do tenant obtidos
-✅ Devices listados: 25 devices
-✅ Métricas da plataforma obtidas
-✅ Acesso bloqueado corretamente
-✅ Impersonate realizado com sucesso
+List devices (tenant-scoped).
 
-==========================================
-✅ Testes Concluídos!
-==========================================
+**Headers:** `Authorization: Bearer <token>`
 
-💡 Casos de Uso Práticos
-1. Monitorar Crescimento da Plataforma
-bash# Ver métricas gerais
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:3010/api/v1/admin/metrics | jq '.platform'
+**Response:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "ESP32S3 Lab Sensor",
+    "status": "online",
+    "device_token": "easysmrt_dev_...",
+    "metadata": {
+      "id": "esp32s3-lab",
+      "model": "ESP32-S3",
+      "manufacturer": "Espressif"
+    },
+    "last_seen": "2025-10-23T14:25:52.048Z",
+    "created_at": "2025-10-23T00:14:53.201Z"
+  }
+]
+```
 
-# Output: total_tenants, new_tenants_30d, total_devices, etc.
-2. Investigar Tenant com Problemas
-bash# Listar todos tenants
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:3010/api/v1/admin/tenants | jq '.tenants[] | {id, name, device_count}'
+---
 
-# Ver detalhes do tenant problemático
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:3010/api/v1/admin/tenants/$TENANT_ID | jq '.'
+#### `POST /devices/provision`
 
-# Impersonate para debug
-curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"reason":"Debug: devices offline há 3 dias"}' \
-  http://localhost:3010/api/v1/admin/tenants/$TENANT_ID/impersonate
-3. Análise de Dispositivos Cross-Tenant
-bash# Ver todos devices online
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:3010/api/v1/admin/devices?status=online&limit=100" \
-  | jq '.devices[] | {name, tenant_name, last_seen}'
+Manually provision device.
 
-# Devices offline de um tenant específico
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:3010/api/v1/admin/devices?tenant_id=$TENANT_ID&status=offline" \
-  | jq '.'
-4. Auditoria de Usuários
-bash# Ver distribuição de roles
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:3010/api/v1/admin/metrics | jq '.users'
+**Headers:** `Authorization: Bearer <token>`
 
-# Listar usuários de um tenant
-curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:3010/api/v1/admin/tenants/$TENANT_ID | jq '.users'
+**Request:**
+```json
+{
+  "name": "Office Sensor",
+  "metadata": {
+    "location": "Office Room 1",
+    "type": "temperature"
+  }
+}
+```
 
-⚠️ Boas Práticas
-✅ DO (Faça)
-
-✅ Use impersonate apenas para suporte técnico
-✅ Sempre forneça um motivo descritivo no impersonate
-✅ Revise logs de auditoria regularmente
-✅ Use filtros e paginação em listas grandes
-✅ Valide tokens antes de operações críticas
-
-❌ DON'T (Não Faça)
-
-❌ Compartilhe credenciais de super_admin
-❌ Use impersonate para operações rotineiras
-❌ Ignore avisos de acesso não autorizado nos logs
-❌ Faça requests sem paginação em produção
-❌ Armazene tokens em logs ou arquivos de texto
-
-
-🔗 Endpoints Relacionados
-Autenticação:
-
-POST /api/v1/auth/login - Obter tokens
-POST /api/v1/auth/refresh - Renovar access token
-GET /api/v1/auth/users/me - Verificar role atual
-
-Devices (Tenant):
-
-GET /api/v1/devices - Devices do tenant autenticado
-GET /api/v1/devices/:id - Detalhes do device
-
-Telemetria:
-
-GET /api/v1/telemetry/:deviceId/:entityId - Dados time-series
-
-
-📚 Documentação Adicional
-
-README.md - Documentação completa do projeto
-CHANGELOG.md - Histórico de mudanças
-API Reference - Todos endpoints
-
-
-Última atualização: 2025-10-18
-Versão da API: v1
-Status: Production Ready ✅
-
-## 📡 MQTT Topics
-
-### **Discovery**
-**Topic:** `easysmart/{device_id}/discovery`
-
-**Payload:**
+**Response:**
 ```json
 {
   "device": {
-    "id": "esp32-lab",
-    "name": "Lab Sensor"
+    "id": "uuid",
+    "name": "Office Sensor",
+    "device_token": "easysmrt_dev_abc123...",
+    "status": "offline"
+  }
+}
+```
+
+---
+
+#### `GET /devices/:id`
+
+Get device details + entities.
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response:**
+```json
+{
+  "device": {
+    "id": "uuid",
+    "name": "ESP32S3 Lab Sensor",
+    "status": "online",
+    "metadata": { ... },
+    "last_seen": "2025-10-23T14:25:52.048Z"
   },
   "entities": [
     {
-      "type": "sensor",
-      "id": "temperature",
-      "unit_of_measurement": "°C"
+      "id": "uuid",
+      "entity_id": "temperature",
+      "entity_type": "sensor",
+      "name": "Temperature",
+      "unit": "°C",
+      "device_class": "temperature"
     }
   ]
 }
 ```
 
-### **Telemetria**
+---
 
-**Sensor:** `easysmart/{device_id}/sensor/{entity_id}/state`
+### 🔧 Admin Endpoints
+
+**Requires:** `role: super_admin`
+
+---
+
+#### `GET /admin/tenants`
+
+List all tenants.
+
+**Query params:**
+- `limit` (default: 50)
+- `offset` (default: 0)
+
+**Response:**
 ```json
-{"value": 23.5, "unit": "°C"}
-```
-
-**Switch:** `easysmart/{device_id}/switch/{entity_id}/state`
-```
-"ON" ou "OFF"
+{
+  "tenants": [
+    {
+      "id": "uuid",
+      "name": "Acme Corp",
+      "created_at": "2025-10-17T11:23:59.199Z",
+      "user_count": "5",
+      "device_count": "12",
+      "status": "active"
+    }
+  ],
+  "total": 10,
+  "pagination": {
+    "limit": 50,
+    "offset": 0
+  }
+}
 ```
 
 ---
 
-## 🎨 Frontend Architecture
+#### `GET /admin/tenants/:id`
 
-### **Rotas**
+Get tenant details.
 
-```typescript
-// Públicas
-/login
-/register
-
-// Protegidas (Authenticated)
-/dashboard           → Overview + KPIs
-/devices             → Lista de devices
-/devices/:id         → Detalhes + entities + charts
-
-// Admin (SUPER_ADMIN apenas)
-/admin               → Admin dashboard
-/admin/tenants       → Gestão de tenants
-/admin/tenants/:id   → Detalhes do tenant
-/admin/devices       → View global de devices
-/admin/metrics       → Métricas da plataforma
+**Response:**
+```json
+{
+  "tenant": {
+    "id": "uuid",
+    "name": "Acme Corp",
+    "created_at": "2025-10-17T11:23:59.199Z"
+  },
+  "users": [...],
+  "devices": [...],
+  "stats": {
+    "total_users": 5,
+    "total_devices": 12,
+    "online_devices": 10
+  }
+}
 ```
 
-### **Sidebar Navigation**
+---
+
+#### `GET /admin/devices`
+
+List all devices (cross-tenant).
+
+**Query params:**
+- `status` (online/offline)
+- `tenant_id` (filter by tenant)
+- `limit`, `offset`
+
+**Response:**
+```json
+{
+  "devices": [
+    {
+      "id": "uuid",
+      "name": "ESP32S3 Lab Sensor",
+      "status": "online",
+      "tenant_id": "uuid",
+      "tenant_name": "Acme Corp",
+      "entity_count": "3"
+    }
+  ],
+  "pagination": {
+    "total": 55,
+    "limit": 10,
+    "offset": 0,
+    "hasMore": true
+  }
+}
+```
+
+---
+
+#### `GET /admin/metrics`
+
+Platform-wide metrics.
+
+**Response:**
+```json
+{
+  "platform": {
+    "total_tenants": 4,
+    "new_tenants_30d": 4,
+    "total_users": 10,
+    "new_users_30d": 8,
+    "total_devices": 55,
+    "online_devices": 53,
+    "new_devices_30d": 55,
+    "active_devices_24h": 28
+  },
+  "system": {
+    "uptime": 86400,
+    "version": "0.4.0"
+  }
+}
+```
+
+---
+
+#### `POST /admin/tenants/:id/impersonate`
+
+Impersonate tenant (for support).
+
+**Request:**
+```json
+{
+  "reason": "Customer requested support for device XYZ"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Impersonate realizado com sucesso",
+  "target_tenant": {
+    "id": "uuid",
+    "name": "Acme Corp"
+  },
+  "tokens": {
+    "accessToken": "eyJhbGc...",
+    "refreshToken": "rt_..."
+  }
+}
+```
+
+**Audit:** All impersonate actions are logged in `audit_logs` table.
+
+---
+
+### 📊 Telemetry Endpoints
+
+#### `GET /telemetry/:deviceId/:entityId/latest`
+
+Get latest value.
+
+**Response:**
+```json
+{
+  "deviceId": "uuid",
+  "entityId": "temperature",
+  "value": 27.1,
+  "unit": "°C",
+  "timestamp": "2025-10-23T17:27:18.053Z"
+}
+```
+
+---
+
+#### `GET /telemetry/:deviceId/:entityId/series`
+
+Get time-series data.
+
+**Query params:**
+- `start` (default: -6h)
+- `stop` (default: now())
+- `window` (default: 1m)
+- `aggregation` (mean/min/max/count)
+
+**Response:**
+```json
+{
+  "series": [
+    {
+      "timestamp": "2025-10-23T17:00:00Z",
+      "value": 26.5
+    },
+    {
+      "timestamp": "2025-10-23T17:01:00Z",
+      "value": 26.8
+    }
+  ]
+}
+```
+
+---
+
+## 🔒 Security
+
+### Authentication Flow
 
 ```
-🏠 Dashboard
-🔌 Devices
-📊 Analytics
+User Login
+    │
+    ├─▶ Validate credentials
+    │
+    ├─▶ Generate Access Token (15min expiry)
+    │
+    ├─▶ Generate Refresh Token (7 days expiry)
+    │
+    └─▶ Return tokens
 
-─────────────────
-
-🔧 Admin Panel (super_admin only)
-  ├─ Tenants
-  ├─ All Devices
-  └─ Metrics
-
-─────────────────
-
-⚙️ Settings
+Access Token Expired
+    │
+    ├─▶ Use Refresh Token
+    │
+    ├─▶ Validate Refresh Token
+    │
+    ├─▶ Generate new Access + Refresh Tokens
+    │
+    └─▶ Return new tokens
 ```
 
-### **Dashboard Responsivo**
+### Rate Limiting
 
-**Desktop:**
-- 4 KPI cards
-- Grid 3 colunas de devices
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| `/auth/login` | 5 requests | 15 minutes |
+| `/auth/register` | 3 requests | 1 hour |
+| `/api/v1/*` | 100 requests | 15 minutes |
+| `/admin/*` | 200 requests | 15 minutes |
 
-**Tablet:**
-- 3 KPI cards
-- Grid 2 colunas
+### Audit Logging
 
-**Mobile:**
-- 3 KPI cards compactos
-- Grid 1 coluna (lista)
+All critical actions are logged in `audit_logs` table:
 
-### **Entity Modal + Chart**
+| Event Type | Description |
+|------------|-------------|
+| `auth.login` | Successful login |
+| `auth.login_failed` | Failed login attempt |
+| `auth.logout` | User logout |
+| `admin.impersonate_start` | Admin impersonation |
+| `device.created` | Device provisioned |
+| `device.deleted` | Device deleted |
+| `security.access_denied` | Unauthorized access attempt |
 
-Click em entity abre modal com:
-- Gráfico temporal (Recharts)
-- Time range selector (1h, 6h, 24h, 7d, 30d)
-- **Export CSV** com todos dados do período
-- Export PNG (opcional)
+**Query audit logs:**
+```sql
+SELECT event_type, action, success, ip_address, created_at 
+FROM audit_logs 
+WHERE user_id = '<uuid>' 
+ORDER BY created_at DESC 
+LIMIT 100;
+```
 
-**CSV Format:**
-```csv
-timestamp,value,unit,device_id,entity_id
-2025-10-17T00:00:00Z,18.2,°C,esp32-lab,temperature
-...
+### Password Security
+
+- **Hashing:** bcrypt with 10 rounds
+- **Min length:** 6 characters
+- **Stored:** Only hash stored, never plain text
+
+### RBAC (Role-Based Access Control)
+
+| Role | Permissions |
+|------|-------------|
+| `super_admin` | Full platform access, cross-tenant operations |
+| `tenant_admin` | Manage tenant users and devices |
+| `user` | View own data, manage own devices |
+
+---
+
+## 📡 Device Integration
+
+### ESPHome Configuration
+
+**Example: ESP32-S3 with Temperature Sensor**
+
+```yaml
+esphome:
+  name: esp32s3-lab
+  friendly_name: "ESP32S3 Lab Sensor"
+  project:
+    name: "easysmart.lab"
+    version: "1.0"
+  
+  on_boot:
+    priority: -10
+    then:
+      - mqtt.publish:
+          topic: easysmart/esp32s3-lab/discovery
+          payload: |-
+            {
+              "device": {
+                "id": "esp32s3-lab",
+                "name": "ESP32S3 Lab Sensor",
+                "model": "ESP32-S3",
+                "manufacturer": "Espressif",
+                "sw_version": "ESPHOME"
+              },
+              "entities": [
+                {
+                  "type": "sensor",
+                  "id": "temperature",
+                  "name": "Temperature",
+                  "unit": "°C",
+                  "device_class": "temperature"
+                },
+                {
+                  "type": "binary_sensor",
+                  "id": "button",
+                  "name": "Button"
+                },
+                {
+                  "type": "switch",
+                  "id": "led",
+                  "name": "Status LED"
+                }
+              ]
+            }
+          retain: true
+          qos: 1
+
+esp32:
+  variant: esp32s3
+  framework:
+    type: esp-idf
+
+logger:
+api:
+ota: 
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+mqtt:
+  broker: 192.168.0.100  # Your server IP
+  username: devices
+  password: !secret mqtt_password
+  topic_prefix: easysmart/esp32s3-lab
+  discovery: false
+  birth_message:
+    topic: easysmart/esp32s3-lab/availability
+    payload: "online"
+    retain: true
+  will_message:
+    topic: easysmart/esp32s3-lab/availability
+    payload: "offline"
+    retain: true
+
+# Sensor DS18B20
+one_wire:
+  - platform: gpio
+    pin: GPIO10
+
+sensor:
+  - platform: dallas_temp
+    name: "Temperature"
+    id: temperature
+    address: 0x290315A279358B28
+    update_interval: 30s
+    unit_of_measurement: "°C"
+    device_class: temperature
+    filters:
+      - median
+
+# Button GPIO12
+binary_sensor:
+  - platform: gpio
+    id: button
+    name: "Button"
+    pin:
+      number: GPIO12
+      mode:
+        input: true
+        pullup: true
+
+# LED GPIO11
+output:
+  - platform: gpio
+    id: led_out
+    pin: GPIO11
+
+switch:
+  - platform: output
+    id: led
+    name: "Status LED"
+    output: led_out
+```
+
+### MQTT Topics
+
+**Discovery (device sends once on boot):**
+```
+easysmart/{device_id}/discovery
+```
+
+**Telemetry (device sends periodically):**
+```
+easysmart/{device_id}/sensor/{entity_id}/state
+easysmart/{device_id}/switch/{entity_id}/state
+easysmart/{device_id}/binary_sensor/{entity_id}/state
+```
+
+**Availability:**
+```
+easysmart/{device_id}/availability
+```
+
+### Discovery Payload Format
+
+```json
+{
+  "device": {
+    "id": "unique-device-id",
+    "name": "Device Name",
+    "model": "ESP32-S3",
+    "manufacturer": "Espressif",
+    "sw_version": "1.0.0"
+  },
+  "entities": [
+    {
+      "type": "sensor|switch|binary_sensor",
+      "id": "entity_id",
+      "name": "Entity Name",
+      "unit": "°C",
+      "device_class": "temperature"
+    }
+  ]
+}
+```
+
+---
+
+## 🔧 Development
+
+### Prerequisites
+
+- Node.js 22.20.0+
+- Docker & Docker Compose
+- Git
+
+### Local Development
+
+```bash
+# Backend
+cd backend
+npm run dev  # Auto-restart on changes
+
+# Frontend
+cd frontend
+npm run dev  # Hot reload enabled
+```
+
+### Database Migrations
+
+```bash
+# Create new migration
+npm run migrate:create <migration-name>
+
+# Run migrations
+npm run migrate:up
+
+# Rollback last migration
+npm run migrate:down
+```
+
+### Useful Commands
+
+```bash
+# View backend logs
+cd backend && npm run dev
+
+# View PostgreSQL
+docker exec -it postgres psql -U postgres -d easysmart
+
+# View InfluxDB data
+docker exec -it influxdb influx query \
+  'from(bucket: "iot_data") 
+    |> range(start: -1h) 
+    |> filter(fn: (r) => r._measurement == "telemetry")'
+
+# View MQTT messages
+docker exec -it mosquitto mosquitto_sub -t 'easysmart/#' -v
+
+# Restart services
+docker-compose restart
+```
+
+---
+
+## 🚀 Production Deployment
+
+### Docker Production Setup
+
+**1. Update docker-compose.prod.yml**
+
+```yaml
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    environment:
+      - NODE_ENV=production
+      - PORT=3010
+    restart: always
+    
+  frontend:
+    build: ./frontend
+    restart: always
+    
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./certs:/etc/nginx/certs
+    restart: always
+```
+
+**2. SSL/TLS Setup**
+
+```bash
+# Generate SSL certificate (Let's Encrypt)
+certbot certonly --standalone -d yourdomain.com
+```
+
+**3. Environment Variables**
+
+```bash
+# Production .env
+NODE_ENV=production
+JWT_SECRET=<strong-random-secret-256-bit>
+POSTGRES_PASSWORD=<strong-password>
+INFLUXDB_TOKEN=<strong-token>
+MQTT_PASSWORD=<strong-password>
+```
+
+**4. Deploy**
+
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### PM2 Production (Alternative)
+
+```bash
+# Install PM2
+npm install -g pm2
+
+# Start backend
+cd backend
+pm2 start src/server.js --name easysmart-backend
+
+# Start frontend build
+cd frontend
+npm run build
+pm2 serve dist 5173 --name easysmart-frontend
+
+# Save PM2 config
+pm2 save
+pm2 startup
 ```
 
 ---
 
 ## 🗺️ Roadmap
 
-### **Phase 2.1.5: Role System & Admin Base** (Agora - 4-6h)
+### ✅ Phase 1: Foundation (COMPLETE)
+- [x] Multi-tenant architecture
+- [x] PostgreSQL schema
+- [x] InfluxDB integration
+- [x] MQTT service
+- [x] Basic CRUD APIs
 
-**Sprint 1: Backend - Roles** (2h)
-- [ ] Migration: adicionar coluna `role`
-- [ ] Atualizar authController (JWT com role)
-- [ ] Middleware `requireSuperAdmin`
-- [ ] Seed: criar super_admin
+### ✅ Phase 2: Security & Admin (COMPLETE)
+- [x] JWT authentication
+- [x] RBAC system
+- [x] Admin panel backend
+- [x] Rate limiting
+- [x] Audit logging
+- [x] Device real integration (ESP32-S3)
 
-**Sprint 2: Admin Routes** (2h)
-- [ ] GET /admin/tenants
-- [ ] GET /admin/tenants/:id
-- [ ] POST /admin/tenants/:id/impersonate
-- [ ] GET /admin/devices
-- [ ] GET /admin/metrics
+### 🚧 Phase 3: Dashboard & UX (IN PROGRESS)
+- [ ] Real-time WebSocket
+- [ ] Device management UI
+- [ ] Telemetry charts (Recharts)
+- [ ] Admin dashboard UI
+- [ ] Responsive design
 
-**Sprint 3: Frontend - Admin Guard** (1h)
-- [ ] Atualizar authStore (role)
-- [ ] AdminRoute component
-- [ ] Sidebar com Admin Panel (condicional)
+### 📅 Phase 4: Advanced Features (PLANNED)
+- [ ] Rule engine (automations)
+- [ ] Notifications (Telegram, Email)
+- [ ] OTA updates via MQTT
+- [ ] Firmware builder (ESPHome)
+- [ ] Multi-language support
 
-**Sprint 4: Validação** (1h)
-- [ ] Testar roles
-- [ ] Validar isolamento
-- [ ] Commit + docs
-
----
-
-### **Phase 2.2: Device Management UI** (8-10h)
-
-**Sprint 1: Layout** (3h)
-- [ ] Sidebar colapsável
-- [ ] TopBar
-- [ ] Layout wrapper
-
-**Sprint 2: Dashboard** (2h)
-- [ ] KPI cards responsivos
-- [ ] Device grid adaptativo
-
-**Sprint 3: Device List** (3h)
-- [ ] Página /devices
-- [ ] Filtros e busca
-- [ ] Device cards
-
-**Sprint 4: Entity Modal** (2-3h)
-- [ ] Modal com chart
-- [ ] Export CSV
+### 📅 Phase 5: Enterprise (FUTURE)
+- [ ] Billing & subscriptions
+- [ ] White-label support
+- [ ] Advanced analytics
+- [ ] Edge gateway
+- [ ] Mobile app (React Native)
 
 ---
 
-### **Phase 2.3: Admin Panel UI** (6-8h)
+## 🤝 Contributing
 
-**Sprint 1: Tenants** (3h)
-- [ ] Lista de tenants
-- [ ] Tenant detail
-- [ ] Impersonate button
+Contributions are welcome! Please follow these steps:
 
-**Sprint 2: Devices** (2h)
-- [ ] Global device list
-- [ ] Filtros cross-tenant
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
 
-**Sprint 3: Metrics** (2h)
-- [ ] Dashboard de métricas
-- [ ] Charts agregados
+### Commit Convention
 
----
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-## 🤖 Colaboração com LLMs
-
-### **Para Claude/ChatGPT Continuando o Projeto**
-
-**LEIA PRIMEIRO:**
-- Este README completo
-- CHANGELOG.md
-- Última seção (contexto de decisões)
-
-**ENTENDA:**
-- Multi-tenancy é CRÍTICO (sempre filtrar por `tenant_id`)
-- Schema PostgreSQL real (colunas: id, name, status, metadata)
-- ESPHome é estratégia atual
-- Foco industrial
-
-**ANTES DE COMEÇAR:**
-```bash
-# Verificar ambiente
-node --version  # v22.20.0
-cd ~/easysmart-platform
-
-# Backend
-cd backend && npm run dev
-curl http://localhost:3010/health | jq
-
-# Frontend
-cd frontend && npm run dev
-
-# Git
-git status
-git log -1
-```
-
-**VALIDAR MULTI-TENANCY:**
-```bash
-# Login admin
-ADMIN_TOKEN=$(curl -s -X POST http://localhost:3010/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@easysmart.io","password":"admin123456"}' \
-  | jq -r '.tokens.accessToken')
-
-# Testar isolamento
-curl -s http://localhost:3010/api/v1/devices \
-  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '. | length'
-```
-
-**PADRÕES DE CÓDIGO:**
-
-Backend:
-```javascript
-// ✅ SEMPRE filtrar por tenant_id
-const tenantId = req.user.tenantId;
-const result = await pool.query(
-  'SELECT * FROM devices WHERE tenant_id = $1',
-  [tenantId]
-);
-```
-
-Frontend:
-```typescript
-// ✅ Usar React Query
-const { data } = useQuery({
-  queryKey: ['devices'],
-  queryFn: () => api.get('/devices').then(res => res.data)
-});
-```
-
-**QUANDO PARAR E PERGUNTAR:**
-- Erros de schema
-- Multi-tenancy vazando dados
-- Decisões arquiteturais
-- Performance issues
-
-**COMMITS:**
-```bash
-feat: adiciona role system
-fix: corrige filtro multi-tenancy
-docs: atualiza API reference
-```
+- `feat:` New feature
+- `fix:` Bug fix
+- `docs:` Documentation
+- `refactor:` Code refactoring
+- `test:` Tests
+- `chore:` Maintenance
 
 ---
 
-## 🐛 Troubleshooting
+## 📄 License
 
-### **Backend não inicia**
-```bash
-cd ~/docker
-docker ps
-docker-compose up -d postgres influxdb mosquitto
-```
-
-### **Frontend: Cannot find module '@/...'**
-```bash
-# Verificar tsconfig.json paths
-# Recarregar VSCode: Ctrl+Shift+P → Reload Window
-```
-
-### **Multi-tenancy vazando dados**
-```bash
-# Ver tenant_id dos devices
-docker exec -it postgres psql -U postgres -d easysmart -c "
-SELECT id, name, tenant_id FROM devices LIMIT 10;
-"
-
-# Adicionar filtro WHERE tenant_id = $1 em TODAS queries
-```
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 📚 Recursos Adicionais
+## 📞 Support
 
-- **Express 5:** https://expressjs.com/
-- **PostgreSQL 16:** https://www.postgresql.org/docs/16/
-- **InfluxDB 2:** https://docs.influxdata.com/influxdb/v2/
-- **React 18:** https://react.dev/
-- **TailwindCSS:** https://tailwindcss.com/docs
-- **shadcn/ui:** https://ui.shadcn.com/
-- **ESPHome:** https://esphome.io/
+- **Issues:** [GitHub Issues](https://github.com/rodrigo-s-lange/easysmart-platform/issues)
+- **Email:** rodrigo.s.lange@gmail.com
+- **Documentation:** [Project Wiki](https://github.com/rodrigo-s-lange/easysmart-platform/wiki)
 
 ---
 
-## 🏭 Contexto Industrial
+## 🙏 Acknowledgments
 
-### **Casos de Uso Target**
-
-1. **Monitoramento de Caldeiras**
-   - Sensores: Temperatura, Pressão, Nível
-   - Protocolo: Modbus RTU via RS485
-   - Devices: 3-20 sensores por caldeira
-
-2. **Automação de Linha de Produção**
-   - Sensores: Contadores, Encoders
-   - Protocolo: Modbus TCP, CAN Bus
-   - Devices: 50+ I/Os por linha
-
-3. **Gestão de Energia**
-   - Sensores: Medidores kWh, Corrente, Tensão
-   - Protocolo: Modbus RTU/TCP
-   - Devices: 3-50 pontos de medição
-
-### **Diferencial Competitivo**
-
-**vs Home Assistant/ESPHome:**
-- ✅ Foco industrial
-- ✅ Multi-tenancy (SaaS)
-- ✅ Suporte RS485/Modbus/CAN
-
-**vs Plataformas Industriais:**
-- ✅ Open source
-- ✅ Custo zero (self-hosted)
-- ✅ API-first
-
-**vs ThingsBoard/Losant:**
-- ✅ Sem limites artificiais
-- ✅ Código aberto
-- ✅ Offline-first
+- [ESPHome](https://esphome.io/) - Excellent firmware framework
+- [InfluxDB](https://www.influxdata.com/) - Time-series database
+- [Eclipse Mosquitto](https://mosquitto.org/) - MQTT broker
+- [shadcn/ui](https://ui.shadcn.com/) - Beautiful UI components
 
 ---
 
-## 🔒 Segurança
+## 📊 Project Stats
 
-- [x] bcrypt (senhas)
-- [x] JWT com refresh token
-- [x] CORS configurado
-- [x] Helmet.js
-- [x] Input validation (Zod)
-- [x] SQL injection protection
-- [ ] MQTT TLS (futuro)
-- [ ] Rate limiting (futuro)
+- **Version:** 0.4.0
+- **Backend Lines:** ~3,500
+- **Frontend Lines:** ~2,000
+- **Test Coverage:** Coming soon
+- **Documentation:** 100%
+- **Device Support:** ESP32, ESP32-S3, ESP32-C3, ESP32-C6, (ESPHome), STM32(coming soon)
 
 ---
 
-## 📈 Performance
+## 🎯 Built With ❤️ by Rodrigo S. Lange
 
-**Benchmarks:**
-- Login: ~120ms
-- GET /devices: ~10ms
-- MQTT throughput: ~1000 msgs/s
-- Bundle size: ~300KB (gzipped)
+**EasySmart Platform** - Making IoT simple, secure, and scalable.
 
 ---
 
-## 👥 Contribuindo
+**⭐ Star this repo if you find it useful!**
 
-1. Fork o repositório
-2. Branch: `git checkout -b feat/nova-feature`
-3. Commit: `git commit -m 'feat: descrição'`
-4. Push: `git push origin feat/nova-feature`
-5. Abra Pull Request
-
----
-
-## 📄 Licença
-
-MIT License - veja [LICENSE](LICENSE)
-
----
-
-## 🙏 Agradecimentos
-
-- **Rodrigo Lange** - Desenvolvedor gordão barbudo raiz!
-- **Claude (Anthropic)** - Pair programming IA
-- **ChatGPT (OpenAI)** - Revisões
-- **Grok (xAI)** - Código técnico
-- **DeepSeek** - Documentação
-- **Google** - Inspirações
-
-**Sem IA esse trabalho seria impensável!**  
-**USE e ABUSE!**
-
-**Leu até aqui?** Me pague um ☕️  
-**PIX:** +5541988360405
-
----
-
-## 📞 Contato
-
-- **Repositório:** https://github.com/rodrigo-s-lange/easysmart-platform
-- **Issues:** https://github.com/rodrigo-s-lange/easysmart-platform/issues
-- **Telefone:** +5541988360405 (WhatsApp)
-- **Email:** rodrigosilvalange@gmail.com
-- **Local:** Curitiba/PR - Brasil
-
----
-
-## 🎓 Aprendizados do Projeto
-
-### **Técnicos**
-1. **Node.js 22 LTS** - Upgrade valeu a pena (performance + suporte até 2027)
-2. **Multi-tenancy** - Row-level security é simples mas CRÍTICO testar
-3. **InfluxDB batching** - Buffer + batch write = 10x melhor performance
-4. **React Query** - Elimina 80% do boilerplate
-5. **TailwindCSS v3** - v4 ainda experimental
-
-### **Arquiteturais**
-1. **Sidebar > Top Nav** - Escalável para 10+ seções
-2. **Página > Modal** - Device detail precisa espaço (20+ entities)
-3. **React Query > Zustand** - Para data fetching, cache inteligente
-4. **ESPHome agora** - Validação de mercado antes de firmware proprietário
-5. **Admin Panel** - Essencial para modelo SaaS B2B
-
-### **Processo**
-1. **LLM collaboration** - Funciona MUITO bem com decisões claras
-2. **Decisões upfront** - Arquitetura antes = menos refatoração
-3. **Commits frequentes** - Facilita rollback
-4. **Documentação viva** - README como fonte única de verdade
-5. **Testes manuais** - Validar multi-tenancy a cada feature
-
----
-
-## 🎯 Filosofia do Projeto
-
-> **"Qualidade > Velocidade. Melhor fazer certo da primeira vez."**
-
-**Princípios:**
-1. **Segurança primeiro** - Multi-tenancy não é negociável
-2. **Código limpo** - Sem TODOs, sem placeholders
-3. **Documentação viva** - README sempre atualizado
-4. **Testes antes de commit** - Validar antes de subir
-5. **Decisões documentadas** - Justificar escolhas importantes
-6. **Colaboração transparente** - Perguntar quando em dúvida
-
----
-
-## 🚀 Próxima Sessão
-
-**Para você ou próxima IA:**
-
-1. ✅ Ler este README completo
-2. ✅ Executar comandos de verificação
-3. ✅ Validar multi-tenancy funcionando
-4. 🚧 Iniciar Phase 2.1.5 (Role System)
-5. 🚧 Criar artifacts conforme padrões
-6. ✅ Testar extensivamente
-7. ✅ Commitar com mensagem clara
-8. ✅ Atualizar CHANGELOG.md
-
-**Boa sorte! O projeto está sólido e pronto para evoluir.** 🎉
-
----
-
-## 📝 Estrutura do Projeto
-
-```
-easysmart-platform/
-├── backend/
-│   ├── src/
-│   │   ├── config/
-│   │   │   ├── database.js
-│   │   │   └── logger.js
-│   │   ├── controllers/
-│   │   │   ├── authController.js
-│   │   │   ├── deviceController.js
-│   │   │   ├── deviceApiController.js
-│   │   │   ├── telemetryController.js
-│   │   │   └── adminController.js (novo - Phase 2.1.5)
-│   │   ├── middleware/
-│   │   │   ├── auth.js
-│   │   │   └── errorHandler.js
-│   │   ├── routes/
-│   │   │   ├── auth.js
-│   │   │   ├── devices.js
-│   │   │   ├── telemetry.js
-│   │   │   └── admin.js (novo - Phase 2.1.5)
-│   │   ├── services/
-│   │   │   ├── influxService.js
-│   │   │   └── mqttService.js
-│   │   ├── utils/
-│   │   │   └── token.js
-│   │   └── server.js
-│   ├── migrations/
-│   │   ├── 1760638437331_create-initial-schema.js
-│   │   └── 1760xxxxxx_add-role-to-users.js (novo)
-│   ├── .env
-│   ├── package.json
-│   └── README.md
-│
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── ui/
-│   │   │   │   ├── button.tsx
-│   │   │   │   ├── input.tsx
-│   │   │   │   ├── label.tsx
-│   │   │   │   └── card.tsx
-│   │   │   └── layout/
-│   │   │       ├── Sidebar.tsx (Phase 2.2)
-│   │   │       ├── TopBar.tsx (Phase 2.2)
-│   │   │       └── Layout.tsx (Phase 2.2)
-│   │   ├── lib/
-│   │   │   ├── api.ts
-│   │   │   ├── utils.ts
-│   │   │   └── queryClient.ts
-│   │   ├── pages/
-│   │   │   ├── Login.tsx
-│   │   │   ├── Register.tsx
-│   │   │   ├── Dashboard.tsx
-│   │   │   └── admin/ (Phase 2.3)
-│   │   │       ├── Tenants.tsx
-│   │   │       ├── TenantDetail.tsx
-│   │   │       ├── Devices.tsx
-│   │   │       └── Metrics.tsx
-│   │   ├── routes/
-│   │   │   ├── ProtectedRoute.tsx
-│   │   │   └── AdminRoute.tsx (Phase 2.1.5)
-│   │   ├── stores/
-│   │   │   └── authStore.ts
-│   │   ├── types/
-│   │   │   └── auth.ts
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── tailwind.config.js
-│   ├── vite.config.ts
-│   ├── tsconfig.json
-│   └── package.json
-│
-├── esphome-examples/
-├── .gitignore
-├── CHANGELOG.md
-├── LICENSE
-└── README.md
-```
-
----
-
-## 🔄 Ciclo de Desenvolvimento
-
-```
-1. Ler README + contexto da última sessão
-2. Validar ambiente (backend + frontend)
-3. Discutir tarefa com desenvolvedor
-4. Implementar feature completa
-5. Testar (incluindo multi-tenancy)
-6. Commit com mensagem clara
-7. Atualizar documentação
-8. Repetir
-```
-
----
-
-## 🎯 Métricas de Sucesso
-
-**Uma sessão é bem-sucedida quando:**
-- ✅ Código funciona sem erros
-- ✅ Multi-tenancy validado
-- ✅ Testes manuais passando
-- ✅ Commits claros e incrementais
-- ✅ Documentação atualizada
-- ✅ Nenhuma regressão
-- ✅ Desenvolvedor satisfeito
-
----
-
-## 📚 Recursos de Referência Rápida
-
-**Backend:**
-```bash
-# Schema
-docker exec -it postgres psql -U postgres -d easysmart -c "\d devices"
-
-# Health
-curl http://localhost:3010/health | jq
-
-# Logs
-tail -f backend/logs/app.log
-```
-
-**Frontend:**
-```bash
-# Lint
-npm run lint
-
-# Build
-npm run build
-
-# Preview
-npm run preview
-```
-
-**Git:**
-```bash
-# Status curto
-git status --short
-
-# Diff resumido
-git diff --stat
-
-# Log gráfico
-git log --oneline --graph -10
-```
-
----
-
-## ⚠️ Avisos Críticos para LLMs
-
-### **NUNCA:**
-❌ Queries sem `tenant_id`  
-❌ Usar colunas antigas (mqtt_id, model, manufacturer)  
-❌ localStorage/sessionStorage em artifacts  
-❌ Commits sem testar multi-tenancy  
-❌ Assumir estrutura do banco  
-❌ TODOs ou placeholders  
-❌ Pular validações  
-
-### **SEMPRE:**
-✅ Filtrar por `tenant_id`  
-✅ Usar colunas reais (verificar schema)  
-✅ Testar multi-tenancy após mudanças  
-✅ Criar código funcional completo  
-✅ Perguntar quando em dúvida  
-✅ Seguir padrões estabelecidos  
-✅ Documentar decisões  
-
----
-
-## 🌟 Template de Primeira Mensagem (LLMs)
-
-```
-Olá! Vou continuar o desenvolvimento do EasySmart IoT Platform.
-
-Li o README completo e entendi que:
-- Phase 2.1 completa (Autenticação OK)
-- Phase 2.1.5 em andamento (Role System)
-- Multi-tenancy é CRÍTICO
-- Schema PostgreSQL: id, name, status, metadata
-- Stack: Node 22 + Express 5 + React 18
-
-Confirmo:
-1. Backend rodando? (porta 3010)
-2. Frontend rodando? (porta 5173)
-3. Multi-tenancy validado?
-4. Posso começar com Phase 2.1.5 Sprint 1?
-
-Aguardo confirmação! 🚀
-```
-
----
-
-## 💾 Commits Ideais
-
-```bash
-# Exemplo de sessão
-git commit -m "feat(backend): add role column to users table"
-git commit -m "feat(backend): implement requireSuperAdmin middleware"
-git commit -m "feat(backend): add admin routes (tenants, devices, metrics)"
-git commit -m "test: validate role-based access control"
-git commit -m "docs: update README with role system"
-```
-
-**Commits pequenos e frequentes > Commits grandes**
-
----
-
-## 🎬 Conclusão
-
-Este README é a **fonte única de verdade** do projeto.
-
-**Sempre:**
-1. Leia este documento primeiro
-2. Verifique código existente
-3. Teste localmente
-4. Pergunte se tiver dúvidas
-
-**O projeto está sólido e pronto para crescer!** 🚀
-
----
-**Última atualização:** 2025-10-18  
-**Versão:** 0.3.0  
-**Status:** Phase 2.1.5 Complete ✅ | Next: Phase 2.2 (Device Management UI)
-
----
-
-*Desenvolvido com ❤️ em Curitiba/PR - Brasil*  
-*Powered by Human + AI Collaboration*
-
----
-
-**FIM DO README.md**
+[🔝 Back to top](#-easysmart-iot-platform)
