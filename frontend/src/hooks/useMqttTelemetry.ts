@@ -2,6 +2,7 @@
  * useMqttTelemetry Hook
  * 
  * Hook React para receber telemetria em tempo real via WebSocket.
+ * Versão final sem erros TypeScript.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -22,6 +23,49 @@ interface AvailabilityData {
   timestamp: string;
 }
 
+interface WelcomeMessage {
+  type: 'welcome';
+  connectionId: string;
+  message: string;
+}
+
+interface AuthSuccessMessage {
+  type: 'auth_success';
+  userId: string;
+  role: string;
+}
+
+interface SubscribedMessage {
+  type: 'subscribed';
+  deviceId: string;
+  entityId?: string;
+}
+
+interface UnsubscribedMessage {
+  type: 'unsubscribed';
+  deviceId: string;
+  entityId?: string;
+}
+
+interface PongMessage {
+  type: 'pong';
+}
+
+interface ErrorMessage {
+  type: 'error';
+  error: string;
+}
+
+type WebSocketMessage =
+  | TelemetryData
+  | AvailabilityData
+  | WelcomeMessage
+  | AuthSuccessMessage
+  | SubscribedMessage
+  | UnsubscribedMessage
+  | PongMessage
+  | ErrorMessage;
+
 interface UseMqttTelemetryReturn {
   telemetry: Map<string, TelemetryData>;
   availability: Map<string, string>;
@@ -36,28 +80,101 @@ const RECONNECT_DELAY = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
 export function useMqttTelemetry(): UseMqttTelemetryReturn {
-  // Obter token do localStorage (ajuste conforme seu auth store)
-  const getAccessToken = (): string | null => {
-    try {
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        const parsed = JSON.parse(authData);
-        return parsed.state?.accessToken || null;
-      }
-    } catch {
-      return null;
-    }
-    return null;
-  };
-
   const [telemetry, setTelemetry] = useState<Map<string, TelemetryData>>(new Map());
   const [availability, setAvailability] = useState<Map<string, string>>(new Map());
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
   
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<number | null>(null);
   const isAuthenticatedRef = useRef(false);
+
+  /**
+   * Obter token do localStorage
+   */
+  const getAccessToken = useCallback((): string | null => {
+    try {
+      const authData = localStorage.getItem('auth-storage');
+      if (authData) {
+        const parsed = JSON.parse(authData);
+        return parsed.state?.accessToken || null;
+      }
+    } catch (err) {
+      console.error('[WS] Error reading token:', err);
+    }
+    return null;
+  }, []);
+
+  /**
+   * Handle telemetria
+   */
+  const handleTelemetry = useCallback((data: TelemetryData) => {
+    const key = `${data.deviceId}:${data.entityId}`;
+    
+    setTelemetry((prev) => {
+      const next = new Map(prev);
+      next.set(key, data);
+      return next;
+    });
+
+    console.log('[WS] Telemetry:', key, data.value);
+  }, []);
+
+  /**
+   * Handle availability
+   */
+  const handleAvailability = useCallback((data: AvailabilityData) => {
+    setAvailability((prev) => {
+      const next = new Map(prev);
+      next.set(data.deviceId, data.status);
+      return next;
+    });
+
+    console.log('[WS] Availability:', data.deviceId, data.status);
+  }, []);
+
+  /**
+   * Handle mensagens do WebSocket
+   */
+  const handleMessage = useCallback((message: WebSocketMessage) => {
+    switch (message.type) {
+      case 'welcome':
+        console.log('[WS] Welcome:', message.message);
+        break;
+
+      case 'auth_success':
+        console.log('[WS] Authenticated as user:', message.userId);
+        isAuthenticatedRef.current = true;
+        break;
+
+      case 'telemetry':
+        handleTelemetry(message);
+        break;
+
+      case 'availability':
+        handleAvailability(message);
+        break;
+
+      case 'subscribed':
+        console.log('[WS] Subscribed:', message.deviceId, message.entityId);
+        break;
+
+      case 'unsubscribed':
+        console.log('[WS] Unsubscribed:', message.deviceId, message.entityId);
+        break;
+
+      case 'pong':
+        // Heartbeat response
+        break;
+
+      case 'error':
+        console.error('[WS] Server error:', message.error);
+        break;
+
+      default:
+        console.warn('[WS] Unknown message type:', message);
+    }
+  }, [handleTelemetry, handleAvailability]);
 
   /**
    * Conectar ao WebSocket
@@ -94,22 +211,22 @@ export function useMqttTelemetry(): UseMqttTelemetryReturn {
         }));
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = (event: MessageEvent) => {
         try {
-          const message = JSON.parse(event.data);
+          const message = JSON.parse(event.data) as WebSocketMessage;
           handleMessage(message);
         } catch (err) {
           console.error('[WS] Failed to parse message:', err);
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('[WS] Error:', error);
+      ws.onerror = () => {
+        console.error('[WS] Connection error');
         setStatus('error');
       };
 
-      ws.onclose = (event) => {
-        console.log('[WS] Closed:', event.code, event.reason);
+      ws.onclose = () => {
+        console.log('[WS] Connection closed');
         setStatus('disconnected');
         isAuthenticatedRef.current = false;
         wsRef.current = null;
@@ -119,7 +236,7 @@ export function useMqttTelemetry(): UseMqttTelemetryReturn {
           reconnectAttemptsRef.current++;
           console.log(`[WS] Reconnecting in ${RECONNECT_DELAY}ms (attempt ${reconnectAttemptsRef.current})`);
           
-          reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = window.setTimeout(() => {
             connect();
           }, RECONNECT_DELAY);
         } else {
@@ -131,78 +248,7 @@ export function useMqttTelemetry(): UseMqttTelemetryReturn {
       console.error('[WS] Connection failed:', err);
       setStatus('error');
     }
-  }, []);
-
-  /**
-   * Handle mensagens do WebSocket
-   */
-  const handleMessage = useCallback((message: any) => {
-    switch (message.type) {
-      case 'welcome':
-        console.log('[WS] Welcome:', message.message);
-        break;
-
-      case 'auth_success':
-        console.log('[WS] Authenticated as user:', message.userId);
-        isAuthenticatedRef.current = true;
-        break;
-
-      case 'telemetry':
-        handleTelemetry(message as TelemetryData);
-        break;
-
-      case 'availability':
-        handleAvailability(message as AvailabilityData);
-        break;
-
-      case 'subscribed':
-        console.log('[WS] Subscribed:', message.deviceId, message.entityId);
-        break;
-
-      case 'unsubscribed':
-        console.log('[WS] Unsubscribed:', message.deviceId, message.entityId);
-        break;
-
-      case 'pong':
-        // Heartbeat response
-        break;
-
-      case 'error':
-        console.error('[WS] Server error:', message.error);
-        break;
-
-      default:
-        console.warn('[WS] Unknown message type:', message.type);
-    }
-  }, []);
-
-  /**
-   * Handle telemetria
-   */
-  const handleTelemetry = useCallback((data: TelemetryData) => {
-    const key = `${data.deviceId}:${data.entityId}`;
-    
-    setTelemetry((prev) => {
-      const next = new Map(prev);
-      next.set(key, data);
-      return next;
-    });
-
-    console.log('[WS] Telemetry:', key, data.value);
-  }, []);
-
-  /**
-   * Handle availability
-   */
-  const handleAvailability = useCallback((data: AvailabilityData) => {
-    setAvailability((prev) => {
-      const next = new Map(prev);
-      next.set(data.deviceId, data.status);
-      return next;
-    });
-
-    console.log('[WS] Availability:', data.deviceId, data.status);
-  }, []);
+  }, [getAccessToken, handleMessage]);
 
   /**
    * Subscribe em device/entity
@@ -253,8 +299,8 @@ export function useMqttTelemetry(): UseMqttTelemetryReturn {
     return () => {
       console.log('[WS] Cleaning up');
       
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
+      if (reconnectTimeoutRef.current !== null) {
+        window.clearTimeout(reconnectTimeoutRef.current);
       }
 
       if (wsRef.current) {
@@ -270,13 +316,13 @@ export function useMqttTelemetry(): UseMqttTelemetryReturn {
   useEffect(() => {
     if (status !== 'connected') return;
 
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'ping' }));
       }
     }, 30000); // 30 segundos
 
-    return () => clearInterval(interval);
+    return () => window.clearInterval(interval);
   }, [status]);
 
   return {
