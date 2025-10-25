@@ -1,46 +1,65 @@
-import axios from 'axios';
+// frontend/src/lib/api.ts
+import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3010/api/v1';
+/**
+ * Resolve baseURL automaticamente:
+ *  - Usa VITE_API_BASE_URL se estiver no .env.local
+ *  - Caso contrário, substitui :5173 por :3010 em localhost
+ *  - Fallback final: http://localhost:3010
+ */
+const fallbackDev =
+  typeof window !== "undefined"
+    ? window.location.origin.replace(":5173", ":3010")
+    : "http://localhost:3010";
+
+const baseURL =
+  import.meta.env?.VITE_API_BASE_URL?.toString() ||
+  fallbackDev ||
+  "http://localhost:3010";
 
 export const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL,
+  withCredentials: false,
+  headers: { "Content-Type": "application/json" },
 });
 
-// Interceptor para adicionar token
+/**
+ * Interceptor para anexar Bearer token do authStore persistido (Zustand)
+ */
 api.interceptors.request.use((config) => {
-  const authData = localStorage.getItem('auth-storage');
-  if (authData) {
-    try {
-      const parsed = JSON.parse(authData);
-      const token = parsed.state?.accessToken;
+  try {
+    const raw = localStorage.getItem("auth-storage");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const token: string | undefined =
+        parsed?.state?.tokens?.accessToken ||
+        parsed?.state?.accessToken ||
+        undefined;
+
       if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+        config.headers = config.headers || {};
+        (config.headers as any).Authorization = `Bearer ${token}`;
       }
-    } catch (err) {
-      console.error('Error parsing auth data:', err);
     }
+  } catch (_e) {
+    // falha silenciosa
   }
   return config;
 });
 
-// Auth API
-export const authApi = {
-  login: (email: string, password: string) => 
-    api.post('/auth/login', { email, password }),
-  
-  register: (email: string, password: string, tenant_name: string) =>
-    api.post('/auth/register', { email, password, tenant_name }),
-  
-  logout: (refreshToken: string) =>
-    api.post('/auth/logout', { refreshToken }),
-  
-  refresh: (refreshToken: string) =>
-    api.post('/auth/refresh', { refreshToken }),
-  
-  me: () => api.get('/auth/users/me'),
-};
+/**
+ * Log simples de erros de resposta
+ */
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    console.error("[API error]", {
+      url: err?.config?.url,
+      status: err?.response?.status,
+      data: err?.response?.data,
+    });
+    return Promise.reject(err);
+  }
+);
 
 export default api;

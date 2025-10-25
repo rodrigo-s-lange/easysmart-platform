@@ -1,138 +1,73 @@
-import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { Loader2, Lock, Mail } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { authApi } from '@/lib/api'
-import { useAuthStore } from '@/stores/authStore'
-
-const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
-})
-
-type LoginFormData = z.infer<typeof loginSchema>
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { api } from "../lib/api";
+import { useAuthStore } from "../stores/authStore";
 
 export default function Login() {
-  const navigate = useNavigate()
-  const setUser = useAuthStore((state) => state.setUser)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const setAuth = useAuthStore((s) => s.setAuth);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: 'admin@easysmart.io',
-      password: 'admin123456',
-    },
-  })
-
-  const onSubmit = async (data: LoginFormData) => {
-    setIsLoading(true)
-    setError(null)
-
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
     try {
-      const response = await authApi.login(data.email, data.password)
-      const { user, tokens } = response.data
-      
-      // Usar authStore
-      setUser(user)
-      useAuthStore.getState().setTokens(tokens.accessToken, tokens.refreshToken)
-      
-      navigate('/dashboard')
-    } catch (err) {
-      const error = err as { response?: { data?: { error?: string } } }
-      setError(error.response?.data?.error || 'Erro ao fazer login')
-    } finally {
-      setIsLoading(false)
+      const { data } = await api.post("/api/v1/auth/login", { email, password });
+      if (data?.tokens?.accessToken) {
+        setAuth({
+          user: data.user,
+          tokens: data.tokens,
+          isAuthenticated: true,
+        });
+        navigate("/realtime");
+      } else {
+        setError("Credenciais inválidas.");
+      }
+    } catch (err: any) {
+      console.error("[Login] Erro:", err);
+      setError("Falha ao autenticar. Verifique usuário e senha.");
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 p-4">
-      <Card className="w-full max-w-md animate-fade-in">
-        <CardHeader className="space-y-1">
-          <div className="flex justify-center mb-4">
-            <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
-              <Lock className="h-6 w-6 text-primary-foreground" />
-            </div>
+    <div className="flex items-center justify-center min-h-screen bg-gray-950 text-white">
+      <form
+        onSubmit={handleLogin}
+        className="bg-gray-900 p-8 rounded-xl shadow-xl w-full max-w-sm"
+      >
+        <h1 className="text-2xl font-bold mb-6 text-center text-green-400">
+          EasySmart Login
+        </h1>
+        {error && (
+          <div className="bg-red-500/20 text-red-400 p-2 rounded mb-4 text-sm text-center">
+            {error}
           </div>
-          <CardTitle className="text-2xl text-center">Bem-vindo de volta</CardTitle>
-          <CardDescription className="text-center">
-            Entre com suas credenciais para acessar a plataforma
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  className="pl-10"
-                  {...register('email')}
-                />
-              </div>
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  className="pl-10"
-                  {...register('password')}
-                />
-              </div>
-              {errors.password && (
-                <p className="text-sm text-destructive">{errors.password.message}</p>
-              )}
-            </div>
-
-            {error && (
-              <div className="p-3 rounded-md bg-destructive/10 border border-destructive">
-                <p className="text-sm text-destructive">{error}</p>
-              </div>
-            )}
-
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Entrando...
-                </>
-              ) : (
-                'Entrar'
-              )}
-            </Button>
-
-            <div className="text-center text-sm">
-              <span className="text-muted-foreground">Não tem uma conta? </span>
-              <Link to="/register" className="text-primary hover:underline">
-                Cadastre-se
-              </Link>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+        )}
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full mb-3 p-2 rounded bg-gray-800 text-white"
+          required
+        />
+        <input
+          type="password"
+          placeholder="Senha"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full mb-3 p-2 rounded bg-gray-800 text-white"
+          required
+        />
+        <button
+          type="submit"
+          className="w-full bg-green-600 hover:bg-green-700 p-2 rounded font-semibold transition"
+        >
+          Entrar
+        </button>
+      </form>
     </div>
-  )
+  );
 }
