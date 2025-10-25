@@ -1,5 +1,5 @@
 ## comandos git
-cd ~/easysmart-platform
+cdcd ~/easysmart-platform
 git add .
 git commit -m "WIP: WebSocket Provider - debugging tela preta"
 git push origin main
@@ -16,3 +16,10 @@ npm run dev
 cd ~/
 cd ~/easysmart-platform/
 
+## criar arquivo via cat EOF
+cd ~/easysmart-platform/frontend
+
+# 1. CollapsibleDeviceCard
+cat > src/components/CollapsibleDeviceCard.tsx << 'EOF'
+//Cole o conteúdo aqui
+EOF
