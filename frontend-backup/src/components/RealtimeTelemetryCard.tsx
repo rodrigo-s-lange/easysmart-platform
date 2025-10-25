@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useMqttTelemetryContext } from '../providers/MqttTelemetryProvider';
+import { useMqttTelemetry } from '../hooks/useMqttTelemetry';
 
 interface RealtimeTelemetryCardProps {
   deviceId: string;
@@ -34,7 +34,7 @@ export function RealtimeTelemetryCard({
   warningThreshold,
   dangerThreshold,
 }: RealtimeTelemetryCardProps) {
-  const { telemetry, availability, status, subscribe, unsubscribe, isConnected } = useMqttTelemetryContext();
+  const { telemetry, availability, status, subscribe, unsubscribe, isConnected } = useMqttTelemetry();
   const [prevValue, setPrevValue] = useState<number | string | boolean | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -225,7 +225,7 @@ export function RealtimeTelemetryCardCompact({
   unit = '',
   icon = '📊',
 }: Pick<RealtimeTelemetryCardProps, 'deviceId' | 'entityId' | 'entityName' | 'unit' | 'icon'>) {
-  const { telemetry, availability, isConnected, subscribe, unsubscribe } = useMqttTelemetryContext();
+  const { telemetry, availability, isConnected, subscribe, unsubscribe } = useMqttTelemetry();
 
   useEffect(() => {
     if (isConnected) subscribe(deviceId, entityId);

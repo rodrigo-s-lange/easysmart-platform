@@ -237,7 +237,7 @@ class WebSocketGateway {
    */
   handleMQTTMessage(topic, payload) {
     const parts = topic.split('/');
-
+console.log('[WS-DEBUG] MQTT Message:', topic, 'payload:', payload);
     // easysmart/{device_id}/{type}/{entity_id}/state
     if (parts.length === 5 && parts[4] === 'state') {
       const [, deviceId, entityType, entityId] = parts;
@@ -281,6 +281,7 @@ class WebSocketGateway {
    * Broadcast mensagem para clientes interessados
    */
   broadcast(deviceId, entityId, message) {
+    console.log("[WS-DEBUG] Broadcasting:", message.type, "deviceId:", deviceId, "to", this.wss?.clients?.size || 0, "clients");
     this.wss.clients.forEach((ws) => {
       if (ws.readyState === WebSocket.OPEN && ws.userId) {
         // TODO: Verificar se cliente tem acesso ao device (tenant_id)

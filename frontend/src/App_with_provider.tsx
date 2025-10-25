@@ -1,9 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
+import { MqttTelemetryProvider } from './providers/MqttTelemetryProvider';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
 import { DashboardPage } from './pages/DashboardPage';
+import UnderConstruction from './pages/UnderConstruction';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 function App() {
@@ -26,7 +29,9 @@ function App() {
             path="/realtime"
             element={
               <ProtectedRoute>
-                <DashboardPage />
+                <MqttTelemetryProvider>
+                  <DashboardPage />
+                </MqttTelemetryProvider>
               </ProtectedRoute>
             }
           />

@@ -124,7 +124,6 @@ export function useMqttTelemetry(): UseMqttTelemetryReturn {
    * Handle availability
    */
   const handleAvailability = useCallback((data: AvailabilityData) => {
-    console.log("[handleAvailability] CALLED with:", JSON.stringify(data));
     setAvailability((prev) => {
       const next = new Map(prev);
       next.set(data.deviceId, data.status);

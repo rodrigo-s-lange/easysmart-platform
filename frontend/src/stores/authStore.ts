@@ -1,34 +1,50 @@
-import { create } from 'zustand'
-import type { User } from '@/types/auth'
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-interface AuthState {
-  user: User | null
-  isAuthenticated: boolean
-  setUser: (user: User | null) => void
-  logout: () => void
+interface User {
+  id: string;
+  email: string;
+  tenant_id: string;
+  role: string;
 }
 
-export const useAuthStore = create<AuthState>((set) => {
-  // Tentar recuperar user do localStorage
-  const storedUser = localStorage.getItem('user')
-  const initialUser = storedUser ? JSON.parse(storedUser) : null
+interface AuthState {
+  user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+  setUser: (user: User | null) => void;
+  setTokens: (accessToken: string, refreshToken: string) => void;
+  logout: () => void;
+}
 
-  return {
-    user: initialUser,
-    isAuthenticated: !!initialUser,
-    setUser: (user) => {
-      if (user) {
-        localStorage.setItem('user', JSON.stringify(user))
-      } else {
-        localStorage.removeItem('user')
-      }
-      set({ user, isAuthenticated: !!user })
-    },
-    logout: () => {
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('refreshToken')
-      localStorage.removeItem('user')
-      set({ user: null, isAuthenticated: false })
-    },
-  }
-})
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      accessToken: null,
+      refreshToken: null,
+      isAuthenticated: false,
+      
+      setUser: (user) => {
+        set({ user, isAuthenticated: !!user });
+      },
+      
+      setTokens: (accessToken, refreshToken) => {
+        set({ accessToken, refreshToken });
+      },
+      
+      logout: () => {
+        set({ 
+          user: null, 
+          accessToken: null, 
+          refreshToken: null, 
+          isAuthenticated: false 
+        });
+      },
+    }),
+    {
+      name: 'auth-storage',
+    }
+  )
+);

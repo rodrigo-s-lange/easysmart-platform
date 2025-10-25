@@ -41,13 +41,13 @@ export default function Login() {
     setError(null)
 
     try {
-      const response = await authApi.login(data.email, data.password)
+      const response = await authApi.login(data)
       const { user, tokens } = response.data
-      
-      // Usar authStore
+
+      localStorage.setItem('accessToken', tokens.accessToken)
+      localStorage.setItem('refreshToken', tokens.refreshToken)
       setUser(user)
-      useAuthStore.getState().setTokens(tokens.accessToken, tokens.refreshToken)
-      
+
       navigate('/dashboard')
     } catch (err) {
       const error = err as { response?: { data?: { error?: string } } }

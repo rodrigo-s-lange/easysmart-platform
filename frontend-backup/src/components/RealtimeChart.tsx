@@ -12,7 +12,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { useMqttTelemetryContext } from '../providers/MqttTelemetryProvider';
+import { useMqttTelemetry } from '../hooks/useMqttTelemetry';
 
 interface DataPoint {
   timestamp: string;
@@ -45,7 +45,7 @@ export function RealtimeChart({
   title,
   unit = '',
 }: RealtimeChartProps) {
-  const { telemetry, availability, isConnected, subscribe, unsubscribe } = useMqttTelemetryContext();
+  const { telemetry, availability, isConnected, subscribe, unsubscribe } = useMqttTelemetry();
   const [chartData, setChartData] = useState<DataPoint[]>([]);
   const deviceStatus = availability.get(deviceId);
 

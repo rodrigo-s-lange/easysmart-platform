@@ -3,7 +3,9 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import { DashboardPage } from './pages/DashboardPage';
+import Dashboard from './pages/Dashboard';
+import DashboardPage from './pages/DashboardPage';
+import UnderConstruction from './pages/UnderConstruction';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 function App() {
@@ -11,14 +13,14 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<UnderConstruction />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Navigate to="/realtime" replace />
+                <Dashboard />
               </ProtectedRoute>
             }
           />

@@ -1,73 +1,46 @@
-import axios from 'axios'
-import type { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse } from '@/types/auth'
+import axios from 'axios';
 
-const api = axios.create({
-  baseURL: '/api/v1',
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3010/api/v1';
+
+export const api = axios.create({
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-})
+});
 
-// Request interceptor: adiciona token em todas as requisições
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('accessToken')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => Promise.reject(error)
-)
-
-// Response interceptor: trata refresh token
-api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config
-
-    // Se 401 e não é retry, tenta refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
-
-      try {
-        const refreshToken = localStorage.getItem('refreshToken')
-        if (!refreshToken) {
-          throw new Error('No refresh token')
-        }
-
-        const { data } = await axios.post('/api/v1/auth/refresh', {
-          refreshToken,
-        })
-
-        localStorage.setItem('accessToken', data.tokens.accessToken)
-        localStorage.setItem('refreshToken', data.tokens.refreshToken)
-
-        originalRequest.headers.Authorization = `Bearer ${data.tokens.accessToken}`
-        return api(originalRequest)
-      } catch (refreshError) {
-        localStorage.removeItem('accessToken')
-        localStorage.removeItem('refreshToken')
-        localStorage.removeItem('user')
-        window.location.href = '/login'
-        return Promise.reject(refreshError)
+// Interceptor para adicionar token
+api.interceptors.request.use((config) => {
+  const authData = localStorage.getItem('auth-storage');
+  if (authData) {
+    try {
+      const parsed = JSON.parse(authData);
+      const token = parsed.state?.accessToken;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
+    } catch (err) {
+      console.error('Error parsing auth data:', err);
     }
-
-    return Promise.reject(error)
   }
-)
+  return config;
+});
 
 // Auth API
 export const authApi = {
-  login: (data: LoginRequest) => 
-    api.post<LoginResponse>('/auth/login', data),
+  login: (email: string, password: string) => 
+    api.post('/auth/login', { email, password }),
   
-  register: (data: RegisterRequest) => 
-    api.post<RegisterResponse>('/auth/register', data),
+  register: (email: string, password: string, tenant_name: string) =>
+    api.post('/auth/register', { email, password, tenant_name }),
   
-  logout: () => 
-    api.post('/auth/logout'),
-}
+  logout: (refreshToken: string) =>
+    api.post('/auth/logout', { refreshToken }),
+  
+  refresh: (refreshToken: string) =>
+    api.post('/auth/refresh', { refreshToken }),
+  
+  me: () => api.get('/auth/users/me'),
+};
 
-export default api
+export default api;
