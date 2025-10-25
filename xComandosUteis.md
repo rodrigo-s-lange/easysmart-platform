@@ -1,8 +1,9 @@
 ## comandos git
 cdcd ~/easysmart-platform
 git add .
-git commit -m "WIP: WebSocket Provider - debugging tela preta"
+git commit -m "New /realtime and 6 new components"
 git push origin main
+
 
 ## start frontend
 cd ~/easysmart-platform/frontend
