@@ -113,7 +113,7 @@ export function useMqttTelemetry(): UseMqttTelemetryReturn {
     
     setTelemetry((prev) => {
       const next = new Map(prev);
-      next.set(key, data);
+      next.set(key, data.value);
       return next;
     });
 
