@@ -1,10 +1,17 @@
+/**
+ * Auth Store - Zustand
+ * 
+ * Gerencia estado de autenticação
+ */
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// ✅ INTERFACE FORA DO CREATE
 interface User {
   id: string;
   email: string;
-  tenant_id: string;
+  tenantId: string;
   role: string;
 }
 
@@ -13,11 +20,14 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
-  setUser: (user: User | null) => void;
+  
+  // Actions
+  setAuth: (data: { user: User; tokens: { accessToken: string; refreshToken: string }; isAuthenticated: boolean }) => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
 
+// ✅ STORE
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -25,21 +35,30 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
-      
-      setUser: (user) => {
-        set({ user, isAuthenticated: !!user });
+
+      setAuth: (data) => {
+        set({
+          user: data.user,
+          accessToken: data.tokens.accessToken,
+          refreshToken: data.tokens.refreshToken,
+          isAuthenticated: data.isAuthenticated,
+        });
       },
-      
+
       setTokens: (accessToken, refreshToken) => {
-        set({ accessToken, refreshToken });
+        set((state) => ({
+          ...state,
+          accessToken,
+          refreshToken,
+        }));
       },
-      
+
       logout: () => {
-        set({ 
-          user: null, 
-          accessToken: null, 
-          refreshToken: null, 
-          isAuthenticated: false 
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
         });
       },
     }),

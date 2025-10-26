@@ -1,7 +1,13 @@
+/**
+ * Login Page - CORRIGIDO
+ * 
+ * Usa setAuth() do authStore
+ */
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../lib/api';
 import { useAuthStore } from '../stores/authStore';
+import api from '../lib/api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -10,7 +16,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   
   const navigate = useNavigate();
-  const { setUser, setTokens } = useAuthStore();
+  const setAuth = useAuthStore((state) => state.setAuth);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,93 +24,94 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const { data } = await api.post('/api/v1/auth/login', { email, password });
-      
-      if (data?.tokens?.accessToken) {
-        setTokens(data.tokens.accessToken, data.tokens.refreshToken);
-        setUser(data.user);
-        navigate('/realtime');
-      } else {
-        setError('Credenciais inválidas.');
-      }
+      const response = await api.post('/api/v1/auth/login', {
+        email,
+        password,
+      });
+
+      const { user, tokens } = response.data;
+
+      // ✅ Usar setAuth do authStore
+      setAuth({
+        user,
+        tokens,
+        isAuthenticated: true,
+      });
+
+      console.log('[Login] Sucesso!', user.email);
+
+      // Redirecionar
+      navigate('/realtime');
+
     } catch (err: any) {
       console.error('[Login] Erro:', err);
-      setError(err.response?.data?.error || 'Falha ao autenticar. Verifique usuário e senha.');
+      setError(err.response?.data?.error || 'Falha ao autenticar. Verifique email e senha.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-cyan-500 via-blue-500 to-purple-600">
-      {/* Animated Background Blur */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
-        <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
-      </div>
-
-      {/* Login Card */}
-      <div className="relative bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 w-full max-w-md border border-white/20">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-block p-3 bg-white/20 rounded-full mb-4">
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-gray-900">
+      <form
+        onSubmit={handleLogin}
+        className="bg-white/10 backdrop-blur-lg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20"
+      >
+        <div className="text-center mb-6">
+          <div className="inline-block p-3 bg-white/20 rounded-xl mb-3">
             <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">
-            EasySmart
+            EasySmart Platform
           </h1>
-          <p className="text-white/80">
-            Plataforma IoT Inteligente
+          <p className="text-white/70 text-sm">
+            Monitoramento Industrial IoT
           </p>
         </div>
 
-        {/* Erro */}
         {error && (
-          <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 text-white rounded-lg backdrop-blur-sm">
+          <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-3 rounded-lg mb-4 text-sm">
             {error}
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleLogin} className="space-y-6">
-          {/* Email */}
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-white/90 mb-2">
+            <label className="block text-white/90 text-sm font-medium mb-2">
               Email
             </label>
             <input
               type="email"
+              placeholder="seu@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
-              className="w-full px-4 py-3 bg-white/20 backdrop-blur-sm border border-white/30 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent transition-all"
-              placeholder="seu@email.com"
+              disabled={loading}
             />
           </div>
 
-          {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-white/90 mb-2">
+            <label className="block text-white/90 text-sm font-medium mb-2">
               Senha
             </label>
             <input
               type="password"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
-              className="w-full px-4 py-3 bg-white/20 backdrop-blur-sm border border-white/30 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent transition-all"
-              placeholder="••••••••"
+              disabled={loading}
             />
           </div>
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-white hover:bg-white/90 text-blue-600 font-bold py-3 rounded-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+            className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
@@ -118,38 +125,27 @@ export default function Login() {
               'Entrar'
             )}
           </button>
-        </form>
+        </div>
 
-        {/* Register Link */}
         <div className="mt-6 text-center">
-          <p className="text-white/80 text-sm">
-            Não tem uma conta?{' '}
-            <a
-              href="/register"
-              className="text-white font-semibold hover:underline"
-            >
-              Cadastre-se
+          <p className="text-white/60 text-sm">
+            Não tem conta?{' '}
+            <a href="/register" className="text-blue-400 hover:text-blue-300 font-medium">
+              Registre-se
             </a>
           </p>
         </div>
-      </div>
 
-      <style>{`
-        @keyframes blob {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-      `}</style>
+        {/* Credenciais de teste */}
+        <div className="mt-6 p-3 bg-white/5 rounded-lg border border-white/10">
+          <p className="text-white/70 text-xs mb-2">
+            <strong>Credenciais de teste:</strong>
+          </p>
+          <p className="text-white/60 text-xs font-mono">
+            admin@easysmart.io / admin123456
+          </p>
+        </div>
+      </form>
     </div>
   );
 }

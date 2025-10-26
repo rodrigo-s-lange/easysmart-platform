@@ -1,20 +1,37 @@
+/**
+ * Device Routes
+ */
+
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
 const deviceController = require('../controllers/deviceController');
-const deviceApiController = require('../controllers/deviceApiController');
+const { requireAuth } = require('../middleware/auth');
 
-// Todas as rotas requerem autenticação
+// Todas as rotas exigem autenticação
 router.use(requireAuth);
 
-// Device Management (provisioning, claiming)
-router.post('/provision', deviceController.provisionDevice);
-router.post('/claim', deviceController.claimDevice);
+/**
+ * GET /api/v1/devices
+ * Lista todos os devices do tenant
+ */
+router.get('/', deviceController.getDevices);
 
-// Device API (CRUD)
-router.get('/', deviceApiController.getDevices);
-router.get('/:id', deviceApiController.getDeviceById);
-router.get('/:id/entities', deviceApiController.getDeviceEntities);
-router.delete('/:id', deviceApiController.deleteDevice);
+/**
+ * POST /api/v1/devices/provision
+ * Provisiona manualmente um novo device
+ */
+router.post('/provision', deviceController.provisionDevice);
+
+/**
+ * GET /api/v1/devices/:id
+ * Busca device específico com entities
+ */
+router.get('/:id', deviceController.getDeviceById);
+
+/**
+ * POST /api/v1/devices/:deviceId/command
+ * Envia comando para dispositivo
+ */
+router.post('/:deviceId/command', deviceController.sendCommand);
 
 module.exports = router;

@@ -1,8 +1,11 @@
 /**
- * CollapsibleDeviceCard - CORRIGIDO
+ * CollapsibleDeviceCard - VERSÃO FINAL FASE 1
  * 
- * - Usa device.mqttId para buscar availability
- * - Subscribe usando mqttId
+ * - Usa componentes reutilizáveis
+ * - Busca último valor ao montar
+ * - Bloqueia collapse quando offline
+ * - Botão CSV SÓ APARECE quando gráfico está expandido
+ * - Exporta últimos 30 dias
  */
 
 import { useState, useEffect } from 'react';
@@ -31,7 +34,6 @@ interface Entity {
 
 interface Device {
   id: string;
-  mqttId: string; // ✅ IMPORTANTE: usado para MQTT
   name: string;
   location?: string;
   icon?: string;
@@ -49,17 +51,15 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [exportingCSV, setExportingCSV] = useState(false);
 
-  // ✅ CORRIGIDO: Usar mqttId para availability
-  const deviceStatus = availability.get(device.mqttId) || 'unknown';
+  const deviceStatus = availability.get(device.id) || 'unknown';
   const isOnline = deviceStatus === 'online';
 
   useEffect(() => {
-    // ✅ Subscribe usando mqttId
-    subscribe(device.mqttId);
+    subscribe(device.id);
     fetchLastValues();
     
-    return () => unsubscribe(device.mqttId);
-  }, [device.mqttId, subscribe, unsubscribe]);
+    return () => unsubscribe(device.id);
+  }, [device.id, subscribe, unsubscribe]);
 
   const fetchLastValues = async () => {
     try {
@@ -67,8 +67,7 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
       
       const promises = device.entities.map(async (entity) => {
         try {
-          // ✅ Usar mqttId na API também
-          await api.get(`/api/v1/telemetry/${device.mqttId}/latest/${entity.id}`);
+          await api.get(`/api/v1/telemetry/${device.id}/latest/${entity.id}`);
           return true;
         } catch (err) {
           return false;
@@ -78,7 +77,7 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
       await Promise.all(promises);
       
     } catch (err) {
-      console.error(`[${device.mqttId}] Erro ao buscar valores:`, err);
+      console.error(`[${device.id}] Erro ao buscar valores:`, err);
     } finally {
       setLoadingInitial(false);
     }
@@ -102,7 +101,7 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
       const end = new Date();
       const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-      const response = await api.get(`/api/v1/telemetry/${device.mqttId}/${entity.id}`, {
+      const response = await api.get(`/api/v1/telemetry/${device.id}/${entity.id}`, {
         params: {
           start: start.toISOString(),
           stop: end.toISOString(),
@@ -110,6 +109,7 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
         },
       });
 
+      // ✅ CORRIGIDO: Backend retorna { data: [...] }
       const rawData = response.data.data || [];
       const csvContent = convertToCSV(rawData, entity);
       
@@ -118,16 +118,16 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
       const url = URL.createObjectURL(blob);
       
       link.setAttribute('href', url);
-      link.setAttribute('download', `${device.mqttId}_${entity.id}_${Date.now()}.csv`);
+      link.setAttribute('download', `${device.id}_${entity.id}_${Date.now()}.csv`);
       link.style.visibility = 'hidden';
       
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      console.log(`[${device.mqttId}:${entity.id}] CSV exportado!`);
+      console.log(`[${device.id}:${entity.id}] CSV exportado!`);
     } catch (err: any) {
-      console.error(`[${device.mqttId}:${entity.id}] Erro ao exportar CSV:`, err);
+      console.error(`[${device.id}:${entity.id}] Erro ao exportar CSV:`, err);
       alert(err.response?.data?.error || 'Falha ao exportar dados');
     } finally {
       setExportingCSV(false);
@@ -138,7 +138,7 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
     const headers = ['timestamp', 'device_id', 'entity_id', 'value', 'unit'];
     const rows = data.map((point) => [
       point._time,
-      device.mqttId,
+      device.id,
       entity.id,
       point._value,
       entity.unit || '',
@@ -151,12 +151,11 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
   };
 
   const renderEntity = (entity: Entity) => {
-    // ✅ Usar mqttId para telemetry key
-    const entityKey = `${device.mqttId}:${entity.id}`;
+    const entityKey = `${device.id}:${entity.id}`;
     const value = telemetry.get(entityKey);
 
     const commonProps = {
-      deviceId: device.mqttId, // ✅ Passar mqttId
+      deviceId: device.id,
       entityId: entity.id,
       name: entity.name,
       value,
@@ -216,9 +215,6 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
                 📍 {device.location}
               </p>
             )}
-            <p className="text-xs text-gray-400 dark:text-gray-500 font-mono">
-              {device.mqttId}
-            </p>
           </div>
         </div>
 
@@ -276,7 +272,7 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
                     {/* Entity Component */}
                     {renderEntity(entity)}
                     
-                    {/* Botão de Gráfico */}
+                    {/* Botão de Gráfico (sempre visível se hasHistory) */}
                     {entity.hasHistory && (
                       <button
                         onClick={() => toggleEntityChart(entity.id)}
@@ -293,13 +289,13 @@ export function CollapsibleDeviceCard({ device }: CollapsibleDeviceCardProps) {
                     {hasChart && entity.hasHistory && (
                       <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg border-2 border-blue-200 dark:border-blue-800 space-y-3">
                         <EntityChart
-                          deviceId={device.mqttId}
+                          deviceId={device.id}
                           entityId={entity.id}
                           entityName={entity.name}
                           unit={entity.unit}
                         />
                         
-                        {/* Botão CSV */}
+                        {/* Botão CSV - SÓ APARECE AQUI */}
                         <button
                           onClick={() => handleExportCSV(entity)}
                           disabled={exportingCSV}
