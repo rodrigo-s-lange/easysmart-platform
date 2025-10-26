@@ -1,5 +1,5 @@
 ## comandos git
-cdcd ~/easysmart-platform
+cd ~/easysmart-platform
 git add .
 git commit -m "New /realtime and 6 new components"
 git push origin main
